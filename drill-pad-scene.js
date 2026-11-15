@@ -1,6 +1,7 @@
 // =====================================================================
-//  drill-pad-scene.js: the Drill Pad map (Practice mode)
-//  Pad size, cadence, flight size, etc. come from the Settings screen.
+//  drill-pad-scene.js: the Drill Pad map (Practice and FDE modes)
+//  Pad size, cadence, flight size, etc. come from the Settings screen, unless the scenario
+//  (scenarios.js) sets its own pad: FDE = a lot with a 40 ft square of cones and a flight of 12.
 //  Painted once in the pixel-art style: grass around an asphalt pad with a painted
 //  boundary, faint lines every 5 steps and orange cones at the corners.
 // =====================================================================
@@ -9,26 +10,40 @@ class DrillPadScene extends Phaser.Scene {
   constructor() { super('DrillPad'); }
 
   create() {
-    const size = PAD_SIZES[settings.padSize];
+    // The scenario chosen on the menu (scenarios.js): Practice coach, FDE, objectives, results
+    const def = SCENARIOS[currentScenario] || SCENARIOS.practice;
+    const P = def.pad || null;
+    const size = P ? { w: P.w, h: P.h } : PAD_SIZES[settings.padSize];
     const padW = size.w * STEP_PX, padH = size.h * STEP_PX;
     const M = STEP_PX * 40;                                 // grass margin around the pad (fills the window)
     const W = padW + 2 * M, H = padH + 2 * M;
+    // Drill area marked by cones (FDE: 40 ft x 40 ft), in the middle of the pad
+    let area = null;
+    if (P && P.area) {
+      const a = P.area * STEP_PX, ax = M + (padW - a) / 2, ay = M + (padH - a) / 2;
+      area = { x0: ax, y0: ay, x1: ax + a, y1: ay + a };
+    }
+    this.area = area;
+    this.pad = { x0: M, y0: M, x1: M + padW, y1: M + padH };
     this.cameras.main.setBackgroundColor('#2f4a2a');
-    this.drawPad(W, H, M, padW, padH);
+    this.drawPad(W, H, M, padW, padH, area);
 
     // The flight: rules in flight-logic.js, drawing in flight-view.js. Starts in column near the bottom of the pad
     const edge = 15;
-    const flightLength = (settings.elementSize - 1) * DISTANCE_PX;
+    const elementSize = P ? P.elementSize : settings.elementSize;
+    const flightLength = (elementSize - 1) * DISTANCE_PX;
     const leadY = M + Math.max(60, Math.min(padH * 0.6, padH - 40 - flightLength));
+    const start = area && def.start ? { x: area.x0 + def.start.x * STEP_PX, y: area.y0 + def.start.y * STEP_PX }
+                                    : { x: M + padW / 2, y: leadY };
     this.flight = new FlightLogic({
       bounds: { x0: M + edge, y0: M + edge, x1: M + padW - edge, y1: M + padH - edge },
-      start: { x: M + padW / 2, y: leadY },
+      start, startDir: def.start ? def.start.dir : 0,
       areaName: 'drill pad',
       onFeedback: showFeedback,
       onStatus: showStatus,
       cadence: settings.cadence,
-      elements: settings.elements,
-      elementSize: settings.elementSize,
+      elements: P ? P.elements : settings.elements,
+      elementSize,
       cdrSide: settings.cdrSide,
       disorder: DISORDER_LEVELS[settings.disorder],
     });
@@ -36,15 +51,28 @@ class DrillPadScene extends Phaser.Scene {
     setActiveFlight(this.flight);
     this.events.once('shutdown', () => { setActiveFlight(null); activeCamera = null; activeRun = null; });
 
-    // The scenario chosen on the menu (scenarios.js): Practice coach, objectives, results
-    const def = SCENARIOS[currentScenario] || SCENARIOS.practice;
     setHud({ mode: esc(def.mode) + ' · <b>' + esc(def.title) + '</b>',
-             attribution: 'Drill pad · each faint square = 5 steps · North is up · Tiles: Kenney.nl' });
+             attribution: (area ? 'Cones mark the 40 ft x 40 ft drill area' : 'Drill pad') +
+                          ' · each faint square = 5 steps · North is up · Tiles: Kenney.nl' });
     this.run = startRun(def, this.flight);
+    this.run.area = area;
+
+    // Planning period (evaluations): click the pad to place the flight, ↻ to turn it (Vol 1 p. 58:
+    // "arrange the flight anywhere on the pad"). Only until the commander reports in.
+    if (def.reportIn) {
+      const planning = () => activeRun === this.run && !this.run.reportedIn && this.run.running;
+      this.input.on('pointerup', p => {
+        if (!planning() || Math.hypot(p.upX - p.downX, p.upY - p.downY) > 6) return;
+        const w = this.cameras.main.getWorldPoint(p.x, p.y);
+        this.placeFlight(w.x, w.y, this.flight.opts.startDir || 0);
+      });
+      setPlanningControls(() => { if (planning()) this.placeFlight(null, null, ((this.flight.opts.startDir || 0) + 2) % 8); });
+    }
     this.metronome = new FootMetronome(this.flight, settings.cadence);
 
     // Smooth camera: start zoomed so the whole pad fits
-    const fit = Math.min((this.scale.width - 120) / padW, (this.scale.height - 340) / padH);   // the pad fits
+    const fitW = area ? (area.x1 - area.x0) * 1.6 : padW, fitH = area ? (area.y1 - area.y0) * 1.6 : padH;
+    const fit = Math.min((this.scale.width - 120) / fitW, (this.scale.height - 340) / fitH);   // the pad (or cone square) fits
     this.camera = new CameraController(this, {
       worldW: W, worldH: H, zoom: LINK.zoom || Math.max(0.5, Math.min(2.2, fit)),
       minZoom: 0.3, maxZoom: 4, target: () => this.flightCenter(),
@@ -54,7 +82,16 @@ class DrillPadScene extends Phaser.Scene {
     giveLinkCommands(this, this.flight);   // commands/fast-forward from the page address
   }
 
-  drawPad(W, H, M, padW, padH) {
+  // Move / turn the flight during the planning period (it is re-formed at the new spot)
+  placeFlight(x, y, dir) {
+    const o = this.flight.opts, b = o.bounds;
+    if (x !== null) o.start = { x: Math.max(b.x0 + 60, Math.min(b.x1 - 60, x)), y: Math.max(b.y0 + 60, Math.min(b.y1 - 60, y)) };
+    o.startDir = dir;
+    this.flight.reset();
+    this.camera.follow = true; this.camera.onChange(this.camera);
+  }
+
+  drawPad(W, H, M, padW, padH, area) {
     const tilesReady = KENNEY_TILES.complete && KENNEY_TILES.naturalWidth > 0;
     PAINT.chunks(this, null, W, H, 'pad', (ctx, x0, y0, x1, y1) => {
       ctx.fillStyle = tilesReady ? PAINT.pattern(ctx, CAMPUS_TILES.grass) : '#4f7a3a';
@@ -76,8 +113,16 @@ class DrillPadScene extends Phaser.Scene {
       ctx.fillStyle = 'rgba(60, 64, 70, 0.5)';
       for (let x = M + 37; x < M + padW; x += 151) ctx.fillRect(x, M, 8, t);
       for (let y = M + 53; y < M + padH; y += 173) ctx.fillRect(M + padW - t, y, t, 8);
+      // Drill area: a thin chalk line between the cones
+      if (area) {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)'; ctx.lineWidth = 4; ctx.setLineDash([24, 18]);
+        ctx.strokeRect(area.x0, area.y0, area.x1 - area.x0, area.y1 - area.y0);
+        ctx.setLineDash([]);
+      }
       // Orange cones at the corners (blocky, with a shadow to the south-east)
-      [[M, M], [M + padW, M], [M, M + padH], [M + padW, M + padH]].forEach(([cx, cy]) => {
+      const corners = area ? [[area.x0, area.y0], [area.x1, area.y0], [area.x0, area.y1], [area.x1, area.y1]]
+                           : [[M, M], [M + padW, M], [M, M + padH], [M + padW, M + padH]];
+      corners.forEach(([cx, cy]) => {
         ctx.fillStyle = 'rgba(10, 20, 30, 0.30)';
         ctx.beginPath(); ctx.ellipse(cx + 10, cy + 14, 16, 10, 0.6, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#1d1d1d'; ctx.fillRect(cx - 16, cy - 16, 32, 32);   // base

@@ -75,6 +75,18 @@
     #coach .what { color: #d3dbe3; }
     #coach .fix { color: #fff; font-weight: 600; margin-top: 4px; }
     .msg.info { border-left-color: var(--accent); }
+    #drillCard { position: absolute; top: 70px; right: 14px; width: 210px; padding: 10px 12px; font-size: 13px; }
+    #drillCard h4 { margin: 0 0 6px; font: 800 13px var(--sans); text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+    #drillCard ol { margin: 0; padding-left: 20px; columns: 1; }
+    #drillCard li { line-height: 1.55; color: #c3cdd7; }
+    #drillCard li.done { color: var(--good); text-decoration: line-through; text-decoration-color: rgba(107,227,138,.5); }
+    #objective .say { margin-top: 6px; padding: 6px 8px; background: #1a232e; border-radius: 4px; font-weight: 600; }
+    #objective .stage { color: var(--gold); font-weight: 700; }
+    .order-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .order-cols ol { margin: 0; padding-left: 22px; font-size: 13.5px; line-height: 1.6; }
+    .order-cols li.out { color: var(--bad); } .order-cols li.rep { color: var(--warn); }
+    .tips li { margin-bottom: 6px; font-size: 14px; }
+    @media (max-width: 760px) { #drillCard { display: none; } }
 
     /* ---------- Results (debrief) and command reference screens ---------- */
     .sheet { width: min(900px, 100%); padding: 24px 26px; max-height: calc(100vh - 48px); overflow: auto; }
@@ -165,9 +177,9 @@
           <h3>Practice</h3><p>Drill pad with a coach: every mistake explained, with the correct command and when to give it.</p>
           <div class="card-actions" id="practiceChoices"><!-- built from scenarios.js --></div>
         </div>
-        <div class="card panel soon">
-          <span class="badge">Phase 7</span><div class="icon">⏱</div>
-          <h3>FDE</h3><p>Flight Drill Evaluation: all 20 movements in under 5:00, in bounds, in the best order.</p>
+        <div class="card panel" id="cardFde">
+          <span class="badge go">Ready</span><div class="icon">⏱</div>
+          <h3>FDE</h3><p>Flight Drill Evaluation: all 20 scorecard movements in under 5:00, inside the cones. Learn the most efficient order.</p>
         </div>
         <div class="card panel soon">
           <span class="badge">Phase 9</span><div class="icon">⚔</div>
@@ -233,6 +245,7 @@
       </div>
       <button class="btn on" id="btnFollow" title="Camera follows the flight (F). Drag the map to look around.">◎ Follow</button>
       <button class="btn" id="btnRef" title="Command reference">? Commands</button>
+      <button class="btn hidden" id="btnTurn" title="Planning period: turn the flight 90 degrees (click the pad to move it)">↻ Turn flight</button>
       <button class="btn primary hidden" id="btnFinish" title="End the session and see your results">✔ Finish</button>
       <button class="btn" id="btnMenu" title="Main menu (Esc)">☰ Menu</button>
     </div>
@@ -240,6 +253,7 @@
       <div id="objective" class="panel hidden"></div>
       <div id="coach" class="panel hidden"></div>
     </div>
+    <div id="drillCard" class="panel hidden"></div>
     <div id="log"></div>
     <div id="hud-bottom">
       <canvas id="metronome" class="panel" width="200" height="84"></canvas>

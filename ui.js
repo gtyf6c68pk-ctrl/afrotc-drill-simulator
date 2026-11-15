@@ -35,12 +35,12 @@ function giveLinkCommands(scene, flight) {
   const list = LINK.commands, advance = LINK.advance;
   LINK.commands = []; LINK.advance = 0;
   if (!advance) {
-    list.forEach((c, i) => scene.time.delayedCall(300 + i * 1200, () => flight.giveCommand(c)));
+    list.forEach((c, i) => scene.time.delayedCall(300 + i * 1200, () => routeCommand(c)));
     return;
   }
   const step = s => { for (let i = 0; i < s * 60; i++) { flight.update(1 / 60); if (scene.metronome) scene.metronome.update(1 / 60); } };
   let used = 0;
-  list.forEach(c => { flight.giveCommand(c); step(1.2); used += 1.2; });
+  list.forEach(c => { routeCommand(c); step(1.2); used += 1.2; });
   step(Math.max(0, advance - used));
   if (scene.flightView) scene.flightView.sync(1);
   if (scene.camera) scene.camera.update(1, true);
@@ -60,6 +60,7 @@ function showScreen(name) {
   $('hud').classList.toggle('hidden', name !== 'play');
   if (name !== 'play') { $('minimapFrame').classList.add('hidden'); $('reference').classList.add('closed'); }
   if (name === 'settings') buildSettings();
+  if (name !== 'play') $('toasts').innerHTML = '';
 }
 
 // Switch the game to another map (the Phaser scene); `game` is created in main.js
@@ -76,7 +77,16 @@ function setHud({ mode, attribution }) {
   $('objective').classList.add('hidden');
   $('coach').classList.add('hidden');
   $('btnFinish').classList.add('hidden');
+  $('drillCard').classList.add('hidden');
+  setPlanningControls(null);
   showScreen('play');
+}
+
+// The planning period's "Turn flight" button (null = hide it)
+let planningTurn = null;
+function setPlanningControls(onTurn) {
+  planningTurn = onTurn;
+  $('btnTurn').classList.toggle('hidden', !onTurn);
 }
 
 // ---------- Scenarios (scenario.js): objective tracker, Practice coach, results ----------
@@ -98,11 +108,13 @@ function startRun(def, flight) {
       coachTimer = setTimeout(() => $('coach').classList.add('hidden'), 12000);
     },
     onClean: () => { clearTimeout(coachTimer); coachTimer = setTimeout(() => $('coach').classList.add('hidden'), 2500); },
-    onObjective: o => toast('✔ ' + o.label, 'good'),
+    onObjective: o => { if (o.type !== 'movement') toast('✔ ' + o.label, 'good'); },   // movements: the drill card ticks
     onEnd: res => showResults(res),
   });
   activeRun = run;
   $('btnFinish').classList.remove('hidden');
+  $('btnFinish').textContent = def.reportOut ? '✔ End evaluation' : '✔ Finish';
+  $('drillCard').classList.toggle('hidden', !run.objectives.some(o => o.type === 'movement'));
   $('objective').classList.remove('hidden');
   updateRunHud(true);
   return run;
@@ -119,6 +131,29 @@ function updateRunHud(force) {
   const clock = t && t.limitSeconds ? formatClock(t.limitSeconds - run.elapsed) : formatClock(run.elapsed);
   const pct = v => v === null ? '–' : v + '%';
   let html = '<div class="row"><b>' + esc(def.title) + '</b><span class="clock">' + clock + '</span></div>';
+  // Evaluations: what to do now (planning, report in, clock, report out)
+  if (def.reportIn) {
+    if (!run.reportedIn) $('btnTurn').classList.toggle('hidden', !planningTurn);
+    else $('btnTurn').classList.add('hidden');
+    const done = run.objectives.filter(o => o.done).length;
+    if (run.stage === 'planning') {
+      html += '<div class="stats"><span class="stage">Planning ' + formatClock(run.planningLeft) + '</span> · read the drill card, ' +
+              'click the pad to place the flight, ↻ to turn it. Then report in:</div><div class="say">' + esc(def.reportIn.say) + '</div>';
+    } else if (run.stage === 'report') {
+      html += '<div class="stats"><span class="stage">Planning time is up.</span> Report in:</div><div class="say">' + esc(def.reportIn.say) + '</div>';
+    } else if (run.stage === 'ready') {
+      html += '<div class="stats">Reported in. The clock starts at your first drill movement.</div>';
+    } else {
+      html += '<div class="stats">Movements <b>' + done + ' / ' + run.objectives.length + '</b>' + (run.inArea ? '' : ' · <span class="no">OUTSIDE THE CONES: return to the drill area</span>') +
+              ' · boundary breaks ' + run.boundaryBreaks + '</div>' +
+              '<div class="bar"><i style="width:' + (100 * done / run.objectives.length) + '%"></i></div>' +
+              (done === run.objectives.length ? '<div class="say">' + esc(def.reportOut.say) + '</div>' : '');
+    }
+    const card = '<h4>Drill card</h4><ol>' + run.objectives.map(o => '<li class="' + (o.done ? 'done' : '') + '">' + esc(o.label) + '</li>').join('') + '</ol>';
+    if ($('drillCard').innerHTML !== card) $('drillCard').innerHTML = card;
+    $('objective').innerHTML = html;
+    return;
+  }
   run.objectives.filter(o => o.type === 'cleanStreak').forEach(o => {
     html += '<div class="stats">Streak: <b>' + (o.progress || 0) + ' / ' + o.count + '</b> commands without an error</div>' +
             '<div class="bar"><i style="width:' + Math.min(100, 100 * (o.progress || 0) / o.count) + '%"></i></div>';
@@ -137,7 +172,9 @@ function showResults(res) {
   const pct = v => v === null ? '–' : v + '%';
   const tile = (v, l, cls) => '<div class="tile ' + (cls || '') + '"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>';
   const grade = (v, good, ok) => v === null ? '' : v >= good ? 'good' : v >= ok ? 'warn' : 'bad';
-  const statusText = { complete: 'Complete ✔', timeout: 'Time is up', finished: 'Session finished', running: '' }[res.status] || res.status;
+  const statusText = { complete: 'Complete ✔', timeout: 'Time is up', finished: 'Session finished', running: '',
+                       'reported-out': 'Reported out' }[res.status] || res.status;
+  if (res.debrief) { showFdeResults(res, statusText); return; }
   let h = '<h2>' + esc(res.title) + '</h2><p class="sub">' + esc(res.mode) + ' · ' + statusText + ' · time ' + formatClock(res.elapsed) + '</p>';
   h += '<div class="tiles">' +
        tile(s.given, 'commands given') +
@@ -171,6 +208,34 @@ function showResults(res) {
            '<td class="' + (r.executed ? 'ok' : 'no') + '">' + (r.executed ? 'executed' : esc(r.reason)) + '</td></tr>').join('') +
          '</table></details>';
   }
+  h += '<div class="sheet-actions"><button class="btn" id="resultsMenu">☰ Main menu</button>' +
+       '<button class="btn primary" id="resultsAgain">↻ Again</button></div>';
+  $('resultsSheet').innerHTML = h;
+  $('resultsMenu').onclick = () => openScene('Menu');
+  $('resultsAgain').onclick = () => openScene('DrillPad');
+  showScreen('results');
+}
+
+// FDE results and debrief (no /100 score: the point is the most efficient ORDER of commands)
+function showFdeResults(res, statusText) {
+  const d = res.debrief, s = res.summary;
+  const tile = (v, l, cls) => '<div class="tile ' + (cls || '') + '"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>';
+  let h = '<h2>' + esc(res.title) + '</h2><p class="sub">' + esc(statusText) + (res.message ? ' · <b>' + esc(res.message) + '</b>' : '') + '</p>';
+  h += '<div class="tiles">' +
+       tile(res.completed + ' / ' + res.objectives.length, 'movements completed', res.completed === res.objectives.length ? 'good' : 'bad') +
+       tile(formatClock(res.elapsed), 'time used (limit ' + formatClock(res.limit) + ')', res.elapsed <= res.limit && res.status !== 'timeout' ? 'good' : 'bad') +
+       tile(d.given, 'commands given (efficient: ' + d.efficient + ')', d.given <= d.efficient ? 'good' : d.given <= d.efficient + 5 ? 'warn' : 'bad') +
+       tile(d.outside + ' / ' + res.boundaryBreaks, 'commands outside the cones / boundary breaks', d.outside || res.boundaryBreaks ? 'bad' : 'good') +
+       tile(d.refused, 'commands refused', d.refused ? 'bad' : 'good') +
+       tile(s.onTime === null ? '–' : s.onTime + '%', 'on the correct heel', s.onTime === null ? '' : s.onTime >= 90 ? 'good' : 'warn') + '</div>';
+  h += '<h3>Drill card</h3><ul class="checklist">' + res.objectives.map(o => '<li class="' + (o.done ? 'ok' : 'no') + '">' +
+       (o.done ? '✔ ' + esc(o.label) + ' <span class="na">' + formatClock(o.doneAt) + '</span>' : '✘ ' + esc(o.label)) + '</li>').join('') + '</ul>';
+  h += '<h3>Debrief: where time and commands were lost</h3><ul class="tips">' + d.tips.map(t => '<li>' + esc(t) + '</li>').join('') + '</ul>';
+  h += '<h3>Your order vs. an efficient order</h3><div class="order-cols"><div><b>Yours (' + d.given + ')</b><ol>' +
+       d.yourOrder.map(c => '<li class="' + (!c.inArea ? 'out' : c.repeat ? 'rep' : '') + '">' + esc(c.text) +
+         (!c.inArea ? ' (outside: did not count)' : '') + '</li>').join('') + '</ol></div>' +
+       '<div><b>Efficient (' + d.efficient + ')</b><ol>' + d.efficientOrder.map(t => '<li>' + esc(t) + '</li>').join('') + '</ol></div></div>';
+  h += '<h3>Why that order works</h3><ul class="tips">' + d.efficientNotes.map(t => '<li>' + esc(t) + '</li>').join('') + '</ul>';
   h += '<div class="sheet-actions"><button class="btn" id="resultsMenu">☰ Main menu</button>' +
        '<button class="btn primary" id="resultsAgain">↻ Again</button></div>';
   $('resultsSheet').innerHTML = h;
@@ -308,10 +373,12 @@ function wireUi() {
   buildReference();
   if (LINK.scenario && SCENARIOS[LINK.scenario]) currentScenario = LINK.scenario;
   document.querySelectorAll('.card[data-open]').forEach(card => { card.onclick = () => openScene(card.dataset.open); });
+  $('cardFde').onclick = () => { currentScenario = 'fde'; openScene('DrillPad'); };
   $('menuSettings').onclick = () => showScreen('settings');
   $('menuCommands').onclick = () => showScreen('reference');
   $('referenceBack').onclick = () => showScreen('menu');
   $('btnFinish').onclick = () => { if (activeRun) activeRun.finish(); };
+  $('btnTurn').onclick = () => { if (planningTurn) planningTurn(); };
   $('settingsBack').onclick = () => showScreen('menu');
   $('settingsDefaults').onclick = () => { settings = { ...DEFAULT_SETTINGS }; saveSettings(); buildSettings(); };
 
@@ -324,7 +391,7 @@ function wireUi() {
   const box = $('commandBox');
   const submit = () => {
     unlockSound();   // browsers only allow sound after a key press or click
-    if (activeFlight && box.value.trim()) activeFlight.giveCommand(box.value);
+    if (activeFlight && box.value.trim()) routeCommand(box.value);
     box.value = '';
     box.focus();
   };

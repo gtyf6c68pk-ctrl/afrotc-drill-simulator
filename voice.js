@@ -119,7 +119,7 @@ const voice = {
     const heardAt = (i in this.lastWordAt) ? this.lastWordAt[i] : performance.now();
     const ageSeconds = (performance.now() - heardAt) / 1000 + settings.voiceDelay;
     this.status('🎤 Heard: “' + text.trim() + '”', 'good');
-    if (activeFlight) activeFlight.giveCommand(text, { voice: true, ageSeconds });
+    if (activeFlight) routeCommand(text, { voice: true, ageSeconds });
     else this.status('🎤 Heard: “' + text.trim() + '”. Open the Drill Pad or Campus first.', 'warn');
   },
 

@@ -48,7 +48,7 @@ const DRILL = {
     unitWord: 'flight',    // "Flight" is the preparatory command of Flight, HALT / Flight, Ten-HUT (2.1.1.1)
   },
   // The command of execution: the last word(s) of every command
-  executionWords: ['harch', 'hace', 'halt', 'cover', 'ten hut', 'right', 'left'],
+  executionWords: ['harch', 'hace', 'halt', 'cover', 'ten hut', 'right', 'left', 'hest', 'harms'],
 
   // ---------- Road guards (FOUNDATION ONLY: the detachment's procedure is not in DAFPAM
   //            34-1203 and will be added later from the user's SOP) ----------
@@ -74,6 +74,9 @@ const DRILL = {
     [/\b(tench hut|tenchut|tenhut|ten hut)\b/g, 'ten hut'],
     [/\b(ah|a|at|uh) ten (chut|hut|shut)\b/g, 'ten hut'],   // "Ah-Ten-CHUT" (user's recording)
     [/\batten (chut|hut)\b/g, 'ten hut'],
+    [/\bparade (rest|hest)\b/g, 'parade hest'],   // Parade, REST (DAFPAM) / Parade, HEST (user's inflection)
+    [/\bpre sent\b/g, 'present'],                  // "Pre-sent, HARMS" (chart)
+    [/\bor der\b/g, 'order'],                      // "Or-der, HARMS" (chart)
     [/\bhalfright\b/g, 'half right'],
     [/\bhalfleft\b/g, 'half left'],
     [/\bninety\b/g, '90'],
@@ -100,6 +103,8 @@ const DRILL = {
     [/\b(then|ten|10|tent|tin|tench|than) (shut|hut|hot|hat|but|what)\b/g, 'ten hut'],   // "Ten-HUT"
     [/\b(tension|tenhut|tenshut)\b/g, 'ten hut'],
     [/\b(covered|covert|cuffer)\b/g, 'cover'],
+    [/\b(arms|alarms|charms|farms|harm|arm|arts|alms)\b/g, 'harms'],          // "HARMS"
+    [/\bparade (best|test|chest|vest|west|nest)\b/g, 'parade hest'],         // "Parade, HEST"
   ],
 
   // Plain words that are NOT accepted (no bad habits): the command voice must be used.
@@ -107,6 +112,7 @@ const DRILL = {
     { word: 'march',     fix: 'Use the command voice: HARCH, not MARCH (e.g. Forward, HARCH).' },
     { word: 'face',      fix: 'Use the command voice: HACE, not FACE (e.g. Right, HACE).' },
     { word: 'attention', fix: 'Use the command voice: Flight, Ten-HUT, not ATTENTION.' },
+    { word: 'arms',      fix: 'Use the command voice: HARMS, not ARMS (e.g. Pre-sent, HARMS).' },
   ],
 
   // ---------- The commands ----------
@@ -180,8 +186,16 @@ const DRILL = {
       action: 'routeStep', variant: 'ROUTE STEP', note: 'out of step; talking allowed', ref: '3.19.1' },
     { key: 'at ease harch', say: 'At Ease, HARCH', label: 'At Ease', foot: 'either', when: 'marching',
       action: 'routeStep', variant: 'AT EASE', note: 'out of step; silence', ref: '3.19.2' },
-    { key: 'ten hut', say: 'Flight, Ten-HUT', label: 'Flight, Ten-HUT', foot: null, when: 'marching',
-      action: 'attention', routeStepOk: true, note: 'back to attention from route step or at ease', ref: '3.19' },
+    { key: 'ten hut', say: 'Flight, Ten-HUT', label: 'Flight, Ten-HUT', foot: null, when: 'both',
+      action: 'attention', routeStepOk: true, note: 'back to attention from parade rest (halt) or from route step / at ease (marching)', ref: '3.3.2, 3.19' },
+    // ---------- At-the-halt positions needed for the FDE (Phase 7; FDE scorecard, DAFPAM Atch 7) ----------
+    // "Parade, HEST": the user's recorded inflection (DAFPAM 3.3.1.1 writes Parade, REST; both are accepted typed).
+    { key: 'parade hest', say: 'Parade, HEST', label: 'Parade Rest', foot: null, when: 'halt',
+      action: 'paradeRest', note: 'only from attention at the halt; Flight, Ten-HUT to return to attention', ref: '3.3.1.1' },
+    { key: 'present harms', say: 'Pre-sent, HARMS', label: 'Present Arms', foot: null, when: 'halt',
+      action: 'presentArms', note: 'first count of the hand salute; nothing else until Order, HARMS', ref: '3.7' },
+    { key: 'order harms', say: 'Or-der, HARMS', label: 'Order Arms', foot: null, when: 'halt',
+      action: 'orderArms', note: 'second count of the hand salute (after Present, HARMS)', ref: '3.7' },
     { key: 'close harch', say: 'Close, HARCH', label: 'Close, HARCH', foot: 'right', when: 'both',
       action: 'interval', close: true, note: 'close interval; the right element stands fast (at the halt) or half steps (marching)', ref: '4.10' },
     { key: 'extend harch', say: 'Extend, HARCH', label: 'Extend, HARCH', foot: 'left', when: 'both',

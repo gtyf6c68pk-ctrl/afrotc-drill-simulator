@@ -17,13 +17,14 @@
 // =====================================================================
 
 const VOSK_MODEL_URL = 'assets/vosk/vosk-model-small-en-us-0.15.tar.gz';
-const VOSK_END_WORDS = ['harch', 'hace', 'halt', 'cover', 'hut', 'right', 'left'];   // after clean-up
+const VOSK_END_WORDS = ['harch', 'hace', 'halt', 'cover', 'hut', 'right', 'left', 'hest', 'harms'];   // after clean-up
 const VOSK_HOLD_SECONDS = 4;   // how long a preparatory command waits for its command of execution
 
 // The phrases the recognizer may hear, made from drill-rules.js. HARCH/HACE aren't English
 // words, so the recognizer listens for "march"/"face" (accepted by voice, as decided).
 function voskGrammar() {
   const spoken = key => key.replace(/\bharch\b/g, 'march').replace(/\bhace\b/g, 'face')
+    .replace(/\bharms\b/g, 'arms').replace(/\bhest\b/g, 'rest')
     .replace(/\b45\b/g, 'forty five').replace(/\b90\b/g, 'ninety');
   const phrases = new Set();
   DRILL.commands.forEach(c => {
@@ -39,6 +40,7 @@ function voskGrammar() {
   });
   phrases.add('flight');
   (DRILL.voicePhrases || []).forEach(p => phrases.add(p));   // e.g. "at ten hut" (Ah-Ten-CHUT)
+  if (typeof REPORT_PHRASES !== 'undefined') REPORT_PHRASES.forEach(p => phrases.add(p));   // FDE report in / out
   phrases.add('[unk]');                                   // anything else
   return [...phrases];
 }
@@ -177,7 +179,7 @@ const voskEngine = {
         this.carry = { words: rest.map(w => w.word), times: rest.map(toMs), until: performance.now() + VOSK_HOLD_SECONDS * 1000 };
         voice.status('🎤 Heard: “' + text + '” … waiting for the command of execution', 'good');
       } else if (activeFlight) {
-        activeFlight.giveCommand(text, { voice: true });   // shows "not a command I know"
+        routeCommand(text, { voice: true });   // a report to the evaluator, or "not a command I know"
       }
     } else if (note && this.lastHeard) {
       voice.status('🎤 Heard: “' + this.lastHeard + '”' + note, 'good');
@@ -188,7 +190,7 @@ const voskEngine = {
     this.lastHeard = text;
     voice.status('🎤 Heard: “' + text + '”', 'good');
     if (!activeFlight) { voice.status('🎤 Heard: “' + text + '”. Open the Drill Pad or Campus first.', 'warn'); return null; }
-    return activeFlight.giveCommand(text, options);
+    return routeCommand(text, options);
   },
 };
 

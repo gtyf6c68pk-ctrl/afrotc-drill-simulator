@@ -68,7 +68,21 @@ class FlightView {
       const snap = v => Math.round(v / (PX / 2)) * (PX / 2);
       s.leftBoot.y = snap(-legs * 5);
       s.rightBoot.y = snap(legs * 5);
-      if (armsAtWaist) {                           // double time: forearms horizontal at the waist
+      // At the halt: parade rest (heels 12 in apart, hands behind the back, 3.3.1.1) and present arms
+      // (right hand up to the cap brim, 3.7). The commander keeps the position of attention.
+      const posture = !info && p.kind !== 'commander' ? this.flight.posture : 'attention';
+      const spread = posture === 'paradeRest' ? 1.6 * PX : 0;
+      s.leftBoot.x = s.base.lb - spread; s.rightBoot.x = s.base.rb + spread;
+      s.leftArm.x = s.base.la; s.rightArm.x = s.base.ra;
+      if (s.flag) s.flag.setRotation(0);
+      if (posture === 'paradeRest') {
+        s.leftArm.y = 3; s.rightArm.y = 3;
+        s.leftArm.x = s.base.la + 1.5 * PX; s.rightArm.x = s.base.ra - 1.5 * PX;
+      } else if (posture === 'presentArms') {
+        s.leftArm.y = 0;
+        if (s.flag) { s.rightArm.y = 0; s.flag.setRotation(0.7); }   // guidon: the flag is dipped forward
+        else { s.rightArm.y = -6; s.rightArm.x = s.base.ra - 2.5 * PX; }
+      } else if (armsAtWaist) {                    // double time: forearms horizontal at the waist
         s.leftArm.y = -3; s.rightArm.y = -3;
       } else if (info && info.sideStep) {          // side step: arms stay at the sides (3.14.1)
         s.leftArm.y = 0; s.rightArm.y = 0;
@@ -134,8 +148,9 @@ class FlightView {
     block(head, 0xffffff, -0.5, -8, 1, 1, 0.6);   // small "facing" marker
 
     const parts = [leftBoot, rightBoot, leftArm, rightArm, body, head];
+    let flag = null;
     if (kind === 'guide') {                       // the guidon: red pennant on a pole (blocky)
-      const flag = add();
+      flag = add();
       block(flag, 0x3b2a1a, 7, -14, 1, 16);
       block(flag, 0xd62828, 8, -14, 6, 2); block(flag, 0xd62828, 8, -12, 4, 2); block(flag, 0xd62828, 8, -10, 2, 1);
       block(flag, 0xff5a4a, 8, -14, 6, 1, 0.8);
@@ -145,7 +160,8 @@ class FlightView {
 
     const box = this.scene.add.container(0, 0, parts).setDepth(10);
     if (this.layer) { this.layer.add(shadow); this.layer.add(box); }   // maps with several cameras keep people in a layer
-    return { box, shadow, leftBoot, rightBoot, leftArm, rightArm, offset: rand() * 2, angle: null };
+    return { box, shadow, leftBoot, rightBoot, leftArm, rightArm, flag, offset: rand() * 2, angle: null,
+             base: { lb: leftBoot.x, rb: rightBoot.x, la: leftArm.x, ra: rightArm.x } };
   }
 }
 

@@ -235,6 +235,7 @@ class FlightLogic {
     this.halfStep = false;    // true after a column movement, until Forward, HARCH (DAFPAM 4.11)
     this.routeStep = false;   // true after Route Step / At Ease, HARCH, until Flight, Ten-HUT (DAFPAM 3.19)
     this.routeStepKind = 'ROUTE STEP';   // or 'AT EASE'
+    this.posture = 'attention';   // at the halt: 'attention', 'paradeRest' (3.3.1.1) or 'presentArms' (3.7)
     this.stepShift = 0;       // Change Step moves the cadence by one step
     this.changeStepAt = null; // step number when a Change Step finishes
     this.lastMovement = null; // 'column' or 'counter': the last movement that ends in a half step
@@ -600,6 +601,9 @@ class FlightLogic {
       case 'counterMarch': return this.cmdCounterMarch(cmd);
       case 'routeStep':    return this.cmdRouteStep(cmd);
       case 'attention':    return this.cmdAttention(cmd);
+      case 'paradeRest':   return this.cmdParadeRest(cmd);
+      case 'presentArms':  return this.cmdPresentArms(cmd);
+      case 'orderArms':    return this.cmdOrderArms(cmd);
       case 'cover':        return this.cmdCover(cmd);
       case 'interval':     return this.cmdInterval(cmd);
       case 'sideStep':     return this.cmdSideStep(cmd);
@@ -950,9 +954,31 @@ class FlightLogic {
   routeStepPhrase() { return this.routeStepKind === 'AT EASE' ? 'at ease' : 'at route step'; }
 
   // Flight, Ten-HUT: back to attention from route step.
+  // Flight, Ten-HUT: from parade rest at the halt (3.3.2), or from route step / at ease (3.19)
   cmdAttention(cmd) {
+    if (!this.marching && this.posture === 'paradeRest') { this.posture = 'attention'; return 'OK:' + cmd.say; }
     if (!this.routeStep) return 'The flight is already at attention.';
     this.routeStep = false;
+    return 'OK:' + cmd.say;
+  }
+
+  // Parade, HEST (3.3.1.1): only from attention at the halt
+  cmdParadeRest(cmd) {
+    if (this.marching) return 'Parade Rest is given at the halt. Halt the flight first.';
+    if (this.columnMovementInProgress()) return 'Finish the column movement first.';
+    this.posture = 'paradeRest';
+    return 'OK:' + cmd.say;
+  }
+
+  // Pre-sent, HARMS / Or-der, HARMS (3.7): first and second count of the hand salute, at the halt
+  cmdPresentArms(cmd) {
+    if (this.marching) return 'Present Arms is given at the halt. Halt the flight first.';
+    this.posture = 'presentArms';
+    return 'OK:' + cmd.say;
+  }
+  cmdOrderArms(cmd) {
+    if (this.posture !== 'presentArms') return 'Or-der, HARMS follows Pre-sent, HARMS (DAFPAM 3.7).';
+    this.posture = 'attention';
     return 'OK:' + cmd.say;
   }
 
@@ -1087,6 +1113,15 @@ class FlightLogic {
       return;
     }
     // While marking time: Forward, HARCH or Flight, HALT.
+    // Parade rest: only Flight, Ten-HUT (3.3.2). Present arms: only Order, HARMS (3.7).
+    if (this.posture === 'paradeRest' && cmd.action !== 'attention') {
+      this.reject(text, cmd.key, 'The flight is at parade rest. Call it to attention first: Flight, Ten-HUT (DAFPAM 3.3.2).');
+      return;
+    }
+    if (this.posture === 'presentArms' && cmd.action !== 'orderArms') {
+      this.reject(text, cmd.key, 'The flight is at present arms. Command Or-der, HARMS first (DAFPAM 3.7).');
+      return;
+    }
     if (this.markTime && !cmd.markTimeOk) {
       this.reject(text, cmd.key, 'The flight is marking time. Command Forward, HARCH (left foot) or Flight, HALT.');
       return;
@@ -1322,7 +1357,7 @@ class FlightLogic {
   statusText() {
     const what = this.columnMovementInProgress() ? 'column movement in progress' : this.formationType() + ' formation';
     const halting = this.haltAt !== null || (this.pending && this.pending.isHalt);
-    const moving = !this.marching ? 'Halted' : halting ? 'Halting' : this.markTime ? 'Marking time' : this.sideStep ? 'Side stepping' : this.doubleTime ? 'Marching (DOUBLE TIME)'
+    const moving = !this.marching ? ({ paradeRest: 'Halted at PARADE REST', presentArms: 'Halted at PRESENT ARMS' }[this.posture] || 'Halted') : halting ? 'Halting' : this.markTime ? 'Marking time' : this.sideStep ? 'Side stepping' : this.doubleTime ? 'Marching (DOUBLE TIME)'
                  : this.routeStep ? 'Marching (' + this.routeStepKind + ')'
                  : this.halfStep ? 'Marching (HALF STEP)' : this.changeStepAt !== null ? 'Marching (CHANGING STEP)' : 'Marching';
     const drift = this.averageDrift();
