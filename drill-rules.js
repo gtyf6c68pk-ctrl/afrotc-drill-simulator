@@ -34,6 +34,22 @@ const DRILL = {
     stairsDriftPx: 6,      // marching onto stairs at attention instead of route step (user's rule)
   },
 
+  // ---------- Preparatory command and command of execution (Phase 6 grading) ----------
+  // DAFPAM 2.2.7 / 3.9.2: for a flight, the preparatory command is given as the heel of the foot
+  // in the direction of the movement strikes the ground, and the command of execution when that
+  // SAME heel next strikes: two steps later ("one step between", 2.4.1). The point of emphasis is
+  // the LAST word of the preparatory command (2.4.2: in Right Flank, "Flank" on the right foot).
+  // 2.4.1 allows a longer interval, so a gap of 4, 6... steps on the same foot is also correct.
+  // At route step / at ease, both parts must be on the same foot (3.19).
+  preparatory: {
+    gapSteps: 2,           // execution comes this many steps after the preparatory command
+    minGapSteps: 1.5,      // closer than this = the two parts run together
+    holdSeconds: 4,        // a typed/spoken preparatory command waits this long for its execution word
+    unitWord: 'flight',    // "Flight" is the preparatory command of Flight, HALT / Flight, Ten-HUT (2.1.1.1)
+  },
+  // The command of execution: the last word(s) of every command
+  executionWords: ['harch', 'hace', 'halt', 'cover', 'ten hut', 'right', 'left'],
+
   // ---------- Road guards (FOUNDATION ONLY: the detachment's procedure is not in DAFPAM
   //            34-1203 and will be added later from the user's SOP) ----------
   // The flight already reports intersections it approaches / crosses / clears
@@ -105,6 +121,8 @@ const DRILL = {
   //   routeStepOk: true if it may be given at route step / at ease (DAFPAM 3.19)
   //   doubleTimeOk: true if it may be given in double time (DAFPAM 3.11.6)
   //   markTimeOk:   true if it may be given while marking time
+  //   notInvertedColumn: true if it can't be given while the flight is in INVERTED column
+  //           (column movements are made from column, DAFPAM 4.11; user's rule, 2026-11-15)
   //   note:   extra help text for the command list
   //   ref:    DAFPAM 34-1203 paragraph
   commands: [
@@ -122,16 +140,18 @@ const DRILL = {
       action: 'flank', turn: 1, ref: '3.17' },
     { key: 'left flank harch', say: 'Left Flank, HARCH', label: 'Left Flank', foot: 'left', when: 'marching',
       action: 'flank', turn: -1, ref: '3.17' },
-    { key: 'to the rear harch', say: 'To the Rear, HARCH', label: 'To the Rear', foot: 'right', when: 'marching',
-      action: 'toTheRear', ref: '3.16' },
+    // To the Rear from the HALT: the flight faces about and steps off (user's detachment practice,
+    // 2026-11-15; DAFPAM 3.16 only describes it while marching).
+    { key: 'to the rear harch', say: 'To the Rear, HARCH', label: 'To the Rear', foot: 'right', when: 'both',
+      action: 'toTheRear', note: 'from the halt the flight faces about and steps off', ref: '3.16' },
     { key: 'column right harch', say: 'Column Right, HARCH', label: 'Column Right', foot: 'right', when: 'both',
-      action: 'column', turn: 1, ref: '4.11' },
+      action: 'column', turn: 1, notInvertedColumn: true, ref: '4.11' },
     { key: 'column left harch', say: 'Column Left, HARCH', label: 'Column Left', foot: 'left', when: 'both',
-      action: 'column', turn: -1, ref: '4.11' },
+      action: 'column', turn: -1, notInvertedColumn: true, ref: '4.11' },
     { key: 'column half right harch', say: 'Column Half Right, HARCH', label: 'Column Half Right', foot: 'right', when: 'both',
-      action: 'column', turn: 0.5, note: '45 degrees; full step resumes on its own', ref: '4.12' },
+      action: 'column', turn: 0.5, note: '45 degrees; full step resumes on its own', notInvertedColumn: true, ref: '4.12' },
     { key: 'column half left harch', say: 'Column Half Left, HARCH', label: 'Column Half Left', foot: 'left', when: 'both',
-      action: 'column', turn: -0.5, note: '45 degrees; full step resumes on its own', ref: '4.12' },
+      action: 'column', turn: -0.5, note: '45 degrees; full step resumes on its own', notInvertedColumn: true, ref: '4.12' },
     { key: 'incline to the right', say: 'Incline to the Right', label: 'Incline to the Right', foot: null, when: 'marching',
       action: 'incline', turn: 0.5, routeStepOk: true, doubleTimeOk: true, note: 'slight change of direction (45 degrees), no pivot', ref: '4.12.4, 3.19' },
     { key: 'incline to the left', say: 'Incline to the Left', label: 'Incline to the Left', foot: null, when: 'marching',

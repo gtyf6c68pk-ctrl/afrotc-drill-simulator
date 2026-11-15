@@ -34,9 +34,13 @@ class DrillPadScene extends Phaser.Scene {
     });
     this.flightView = new FlightView(this, this.flight);
     setActiveFlight(this.flight);
-    this.events.once('shutdown', () => { setActiveFlight(null); activeCamera = null; });
+    this.events.once('shutdown', () => { setActiveFlight(null); activeCamera = null; activeRun = null; });
 
-    setHud({ mode: 'Practice · <b>Drill Pad</b>', attribution: 'Each faint square = 5 steps · North is up · Tiles: Kenney.nl' });
+    // The scenario chosen on the menu (scenarios.js): Practice coach, objectives, results
+    const def = SCENARIOS[currentScenario] || SCENARIOS.practice;
+    setHud({ mode: esc(def.mode) + ' · <b>' + esc(def.title) + '</b>',
+             attribution: 'Drill pad · each faint square = 5 steps · North is up · Tiles: Kenney.nl' });
+    this.run = startRun(def, this.flight);
     this.metronome = new FootMetronome(this.flight, settings.cadence);
 
     // Smooth camera: start zoomed so the whole pad fits
@@ -98,5 +102,7 @@ class DrillPadScene extends Phaser.Scene {
     this.flightView.sync(dt);
     this.metronome.update(dt);
     this.camera.update(dt);
+    this.run.update(dt);
+    updateRunHud();
   }
 }

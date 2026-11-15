@@ -8,11 +8,11 @@ class MenuScene extends Phaser.Scene {
 
   create() {
     // A link straight to a screen (see LINK in ui.js) skips the menu once
-    if (LINK.scene && LINK.scene !== 'Menu' && LINK.scene !== 'Settings') {
+    if (LINK.scene && !['Menu', 'Settings', 'Reference'].includes(LINK.scene)) {
       const s = LINK.scene; LINK.scene = null; this.scene.start(s); return;
     }
     setActiveFlight(null);
-    showScreen('menu');
+    if (!LINK.scene || LINK.scene === 'Menu') { LINK.scene = null; showScreen('menu'); }
 
     const W = 4000, H = 3000;
     if (KENNEY_TILES.complete && KENNEY_TILES.naturalWidth > 0) {

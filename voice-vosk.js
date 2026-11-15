@@ -112,7 +112,7 @@ const voskEngine = {
 
   isCommandStart(words) {
     const start = cleanUpCommand(words.join(' '), true);
-    return !!start && DRILL.commands.some(c => c.key.startsWith(start + ' '));
+    return !!start && (isPreparatoryOnly(start) || DRILL.commands.some(c => c.key.startsWith(start + ' ')));
   },
 
   // Quick guess while still speaking: carry out a command the moment it is complete
@@ -133,9 +133,16 @@ const voskEngine = {
   // Final result (after a pause), with the exact start time of every word
   onResult(result) {
     const timed = (result.result || []).filter(w => w.word !== '[unk]');
-    const carried = this.carry && performance.now() <= this.carry.until ? this.carry.words.map(word => ({ word })) : [];
+    const carried = this.carry && performance.now() <= this.carry.until
+      ? this.carry.words.map((word, i) => ({ word, ms: this.carry.times ? this.carry.times[i] : null })) : [];
     const all = carried.concat(timed);
-    const toMs = w => (w && w.start !== undefined && this.audioStartMs !== null) ? this.audioStartMs + w.start * 1000 : null;
+    const toMs = w => !w ? null : w.ms !== undefined ? w.ms
+                    : (w.start !== undefined && this.audioStartMs !== null) ? this.audioStartMs + w.start * 1000 : null;
+    // The last word of the PREPARATORY command of the command in all[from .. to-1] (graded by DAFPAM 3.9.2)
+    const prepMs = (from, to) => {
+      const n = execWordCount(all.slice(from, to).map(w => w.word));
+      return to - 1 - n >= from ? toMs(all[to - 1 - n]) : null;
+    };
     let pos = 0, note = '';
     // Start fresh for the next utterance FIRST, so nothing below can leave stale notes behind
     const executed = this.executed;
@@ -148,7 +155,8 @@ const voskEngine = {
       const last = all[pos + e.count - 1];
       const saidAt = toMs(last);
       if (saidAt !== null && activeFlight) {
-        activeFlight.judgeTiming(e.handle, (e.givenAt - saidAt) / 1000);
+        const prepAt = prepMs(pos, pos + e.count);
+        activeFlight.judgeTiming(e.handle, (e.givenAt - saidAt) / 1000, prepAt !== null ? (e.givenAt - prepAt) / 1000 : null);
         note = ' (HARCH/HALT started ' + ((e.givenAt - saidAt) / 1000).toFixed(2) + ' s before the flight reacted)';
       }
       pos += e.count;
@@ -162,9 +170,11 @@ const voskEngine = {
       const key = cleanUpCommand(text, true);
       const saidAt = toMs(rest[rest.length - 1]);
       if (COMMANDS_BY_KEY[key]) {
-        this.give(text, { voice: true, ageSeconds: saidAt !== null ? (performance.now() - saidAt) / 1000 : settings.voiceDelay });
+        const prepAt = prepMs(pos, all.length);
+        this.give(text, { voice: true, ageSeconds: saidAt !== null ? (performance.now() - saidAt) / 1000 : settings.voiceDelay,
+                          prepAgeSeconds: prepAt !== null ? (performance.now() - prepAt) / 1000 : null });
       } else if (this.isCommandStart(rest.map(w => w.word))) {
-        this.carry = { words: rest.map(w => w.word), until: performance.now() + VOSK_HOLD_SECONDS * 1000 };
+        this.carry = { words: rest.map(w => w.word), times: rest.map(toMs), until: performance.now() + VOSK_HOLD_SECONDS * 1000 };
         voice.status('🎤 Heard: “' + text + '” … waiting for the command of execution', 'good');
       } else if (activeFlight) {
         activeFlight.giveCommand(text, { voice: true });   // shows "not a command I know"
@@ -181,6 +191,15 @@ const voskEngine = {
     return activeFlight.giveCommand(text, options);
   },
 };
+
+// How many of the last words are the command of execution ("harch" = 1, "a ten shut" = 3 ...)
+function execWordCount(words) {
+  for (let n = 1; n <= Math.min(3, words.length); n++) {
+    const c = cleanUpCommand(words.slice(-n).join(' '), true);
+    if (c === 'ten hut' || (n === 1 && DRILL.executionWords.includes(c))) return n;
+  }
+  return 1;
+}
 
 // Load a script file only when it's first needed (the offline engine is large)
 function loadScriptOnce(src) {

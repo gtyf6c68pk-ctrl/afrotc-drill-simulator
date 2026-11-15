@@ -56,6 +56,46 @@
     .fineprint { margin-top: 22px; color: #6d7a88; font-size: 12px; }
 
     .settings { width: min(720px, 100%); padding: 24px 26px; }
+    .card.choices { cursor: default; }
+    .card-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+    .card-actions .btn { text-align: left; font-size: 13px; }
+
+    /* ---------- Objective tracker + Practice coach (top center of the HUD) ---------- */
+    #hud-center { position: absolute; top: 84px; left: 50%; transform: translateX(-50%); width: min(560px, calc(100vw - 28px));
+                  display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+    #objective { padding: 10px 14px; font-size: 14px; }
+    #objective .row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+    #objective b { font-weight: 800; }
+    #objective .stats { color: #b9c4cf; font-size: 13px; margin-top: 4px; }
+    #objective .clock { font: 800 18px var(--sans); font-variant-numeric: tabular-nums; }
+    .bar { height: 6px; background: #1f2a37; border-radius: 3px; margin-top: 8px; overflow: hidden; }
+    .bar > i { display: block; height: 100%; background: var(--good); transition: width .3s; }
+    #coach { padding: 10px 14px; border-left: 4px solid var(--gold); font-size: 14px; line-height: 1.45; animation: toastIn .25s ease; }
+    #coach .head { font-weight: 800; color: var(--gold); font-size: 12px; text-transform: uppercase; letter-spacing: .6px; margin-bottom: 3px; }
+    #coach .what { color: #d3dbe3; }
+    #coach .fix { color: #fff; font-weight: 600; margin-top: 4px; }
+    .msg.info { border-left-color: var(--accent); }
+
+    /* ---------- Results (debrief) and command reference screens ---------- */
+    .sheet { width: min(900px, 100%); padding: 24px 26px; max-height: calc(100vh - 48px); overflow: auto; }
+    .sheet h2 { margin: 0 0 4px; font: 800 28px var(--sans); }
+    .sheet h3 { margin: 22px 0 8px; font: 800 17px var(--sans); }
+    .sheet .sub { color: var(--muted); margin: 0 0 14px; font-size: 14px; }
+    .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+    .tile { background: #1a232e; border: 1px solid var(--line); border-radius: 6px; padding: 12px; }
+    .tile .v { font: 800 26px var(--sans); font-variant-numeric: tabular-nums; }
+    .tile .l { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+    .tile.good .v { color: var(--good); } .tile.bad .v { color: var(--bad); } .tile.warn .v { color: var(--warn); }
+    .mistake { padding: 10px 12px; border-left: 4px solid var(--bad); background: #1a232e; border-radius: 4px; margin-bottom: 8px; font-size: 14px; }
+    .mistake .fix { color: var(--good); margin-top: 4px; }
+    table.list { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    table.list th { text-align: left; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel-solid); }
+    table.list td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    .ok { color: var(--good); } .no { color: var(--bad); } .meh { color: var(--warn); } .na { color: #6d7a88; }
+    details summary { cursor: pointer; color: var(--accent); font-weight: 600; margin: 18px 0 8px; }
+    .sheet-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; flex-wrap: wrap; }
+    .checklist { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 4px 16px; }
+    .checklist li { font-size: 14px; }
     .settings h2 { margin: 0 0 4px; font: 800 28px var(--sans); letter-spacing: -0.01em; }
     .settings .sub { color: var(--muted); margin: 0 0 18px; font-size: 14px; }
     .setting { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
@@ -120,9 +160,10 @@
       <div class="logo"><small>AFROTC</small>DRILL SIMULATOR</div>
       <div class="tagline">Lead your flight as flight commander. Command voice, correct foot, every time.</div>
       <div class="cards">
-        <div class="card panel" data-open="DrillPad">
+        <div class="card panel choices">
           <span class="badge go">Ready</span><div class="icon">▦</div>
-          <h3>Practice</h3><p>Drill pad. Every command, no grading. Learn the timing with the metronome.</p>
+          <h3>Practice</h3><p>Drill pad with a coach: every mistake explained, with the correct command and when to give it.</p>
+          <div class="card-actions" id="practiceChoices"><!-- built from scenarios.js --></div>
         </div>
         <div class="card panel soon">
           <span class="badge">Phase 7</span><div class="icon">⏱</div>
@@ -159,6 +200,24 @@
     </div>
   </div>
 
+  <!-- ===== Results / debrief (built by showResults in ui.js) ===== -->
+  <div id="screen-results" class="screen hidden">
+    <div class="sheet panel" id="resultsSheet"></div>
+  </div>
+
+  <!-- ===== Command reference (built from drill-rules.js by buildReference in ui.js) ===== -->
+  <div id="screen-reference" class="screen hidden">
+    <div class="sheet panel">
+      <h2>Command reference</h2>
+      <p class="sub">Every command in the simulator, from DAFPAM 34-1203 and the command inflection chart.
+        While marching, say the preparatory command as the heel of the foot shown strikes the ground and the command of
+        execution when that same heel strikes again (DAFPAM 3.9.2). Type it in one line, or in two parts
+        (preparatory, Enter, then execution, Enter) to have both parts graded.</p>
+      <div id="referenceTable"></div>
+      <div class="sheet-actions"><button class="btn primary" id="referenceBack">◀ Back</button></div>
+    </div>
+  </div>
+
   <!-- ===== In-game HUD (shown on the maps) ===== -->
   <div id="hud" class="hidden">
     <div id="hud-top-left" class="panel">
@@ -174,7 +233,12 @@
       </div>
       <button class="btn on" id="btnFollow" title="Camera follows the flight (F). Drag the map to look around.">◎ Follow</button>
       <button class="btn" id="btnRef" title="Command reference">? Commands</button>
+      <button class="btn primary hidden" id="btnFinish" title="End the session and see your results">✔ Finish</button>
       <button class="btn" id="btnMenu" title="Main menu (Esc)">☰ Menu</button>
+    </div>
+    <div id="hud-center">
+      <div id="objective" class="panel hidden"></div>
+      <div id="coach" class="panel hidden"></div>
     </div>
     <div id="log"></div>
     <div id="hud-bottom">
@@ -225,6 +289,9 @@
   <script src="settings.js"></script>
   <script src="drill-rules.js"></script>
   <script src="flight-logic.js"></script>
+  <script src="scoring.js"></script>
+  <script src="scenario.js"></script>
+  <script src="scenarios.js"></script>
   <script src="flight-view.js"></script>
   <script src="metronome.js"></script>
   <script src="ui.js"></script>

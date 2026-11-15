@@ -37,6 +37,38 @@ DRILL.commands.forEach(c => { COMMANDS_BY_KEY[c.key] = c; });
 
 // How far (in steps, 0 to 1) cadence position `p` is from a heel strike of `foot`.
 // Heel strikes: left at steps 1, 3, 5...; right at 2, 4, 6...; 'either' = any.
+// Is this (cleaned-up) text a preparatory command waiting for its command of execution?
+// e.g. "right flank" (-> Right Flank, HARCH) or "flight" (-> Flight, HALT / Flight, Ten-HUT)
+function isPreparatoryOnly(cleaned) {
+  if (!cleaned || COMMANDS_BY_KEY[cleaned]) return false;
+  if (cleaned === DRILL.preparatory.unitWord) return true;
+  return DRILL.commands.some(c => c.key.startsWith(cleaned + ' ') &&
+                                  DRILL.executionWords.includes(c.key.slice(cleaned.length + 1)));
+}
+
+// Grade the PREPARATORY command's timing (DAFPAM 2.2.7, 2.4, 3.9.2): its last word on the same heel
+// as the command of execution, at least one step before it (normally two steps: same heel, next strike).
+//   prepStep / execStep: cadence positions when each part was said; foot: the command's foot
+// Returns null (fine) or { error, gap, text }.
+function prepTimingProblem(prepStep, execStep, foot) {
+  const P = DRILL.preparatory;
+  const gap = execStep - prepStep;
+  const round2 = v => Math.round(v * 100) / 100;
+  if (gap < P.minGapSteps) {
+    return { error: 1, gap: round2(gap), text: 'the preparatory command and the command of execution ran together; leave one step between them (DAFPAM 2.4.1)' };
+  }
+  if (foot === 'either') {                         // Flight, HALT: both parts on the same heel (even gap)
+    const error = Math.abs(gap - 2 * Math.round(gap / 2));
+    if (error <= 2 * TIMING_GRACE) return null;
+    return { error: round2(error), gap: round2(gap), text: 'give "Flight" and HALT on the SAME foot: "Flight" as a heel strikes, HALT when that heel strikes again (DAFPAM 3.9.2)' };
+  }
+  const error = timingErrorAt(prepStep, foot);
+  if (error <= TIMING_GRACE) return null;
+  return { error: round2(error), gap: round2(gap),
+           text: 'preparatory command ' + (error > 0.5 ? 'on the WRONG foot' : 'a little off the heel strike') +
+                 '; give it as the ' + foot.toUpperCase() + ' heel strikes, two steps before the command of execution (DAFPAM 3.9.2)' };
+}
+
 function timingErrorAt(p, foot) {
   if (p < 0) return 0;
   if (foot === 'either') return Math.abs(p - Math.round(p));
@@ -168,6 +200,8 @@ class FlightLogic {
     this.generation = 0;  // goes up on every reset, so the drawing code knows to rebuild
     this.events = [];     // EVENT LOG: everything that happens (read by scoring and scenarios)
     this.clock = 0;       // seconds since the flight was created
+    this.commandSeq = 0;  // id of the last command carried out (event log)
+    this.heldPrep = null; // a preparatory command typed/said on its own, waiting for its execution word
     this.intersections = (options.intersections || []).map(i => ({ ...i, state: null }));
     this.elements = [];   // elements[e][i]: element e (0 = 1st), cadet i (0 = element leader)
     this.guide = null;
@@ -250,10 +284,12 @@ class FlightLogic {
   feedback(message, good) { if (this.opts.onFeedback) this.opts.onFeedback(message, good); }
 
   // EVENT LOG (Phase 4). Every entry: { type, time (s), step (cadence position), ...details }.
-  // Types: command, command-rejected, timing-graded, movement, halted, out-of-bounds, obstacle,
-  //        stairs, intersection, reset. Scoring and scenarios read this.events.
+  // Types: command, command-rejected, preparatory, timing-graded, movement, halted, out-of-bounds,
+  //        obstacle, stairs, intersection, reset. Scoring and scenarios read this.events
+  //        (each entry has a running number `seq`, so readers can pick up where they left off).
   log(type, details) {
-    const entry = { type, time: Math.round(this.clock * 1000) / 1000,
+    this.eventSeq = (this.eventSeq || 0) + 1;
+    const entry = { seq: this.eventSeq, type, time: Math.round(this.clock * 1000) / 1000,
                     step: this.marching ? Math.round(this.realSteps() * 100) / 100 : null, ...details };
     this.events.push(entry);
     if (this.events.length > 5000) this.events.shift();      // keep memory bounded
@@ -485,7 +521,8 @@ class FlightLogic {
   // estimate; now the exact moment the last word was said is known. Grade the foot timing on
   // that, and move the "one more step" onto the correct step if it hasn't happened yet.
   //   ageAtGive: seconds between the word being said and the command being carried out
-  judgeTiming(handle, ageAtGive) {
+  //   prepAgeAtGive (optional): the same for the last word of the preparatory command
+  judgeTiming(handle, ageAtGive, prepAgeAtGive) {
     if (!handle) return;
     const exactStep = handle.stepAtGive - ageAtGive / handle.stepSec;
     if (handle.pending && this.pending === handle.pending) {
@@ -494,11 +531,16 @@ class FlightLogic {
     if (!handle.foot) return;
     const error = timingErrorAt(exactStep, handle.foot);
     const problem = this.timingProblem(error, handle.foot);
-    this.log('timing-graded', { name: handle.name, foot: handle.foot, timingError: Math.round(error * 100) / 100,
-                                problem: problem ? problem.text : null });
-    if (!problem) return;
-    if (handle.action !== 'cover') this.addDisorder(problem.drift);
-    this.feedback('⚠ ' + handle.name + ' — ' + problem.text + '. The flight is getting ragged.', 'warn');
+    const prepStep = prepAgeAtGive !== undefined && prepAgeAtGive !== null ? handle.stepAtGive - prepAgeAtGive / handle.stepSec : null;
+    const prep = prepStep !== null ? prepTimingProblem(prepStep, exactStep, handle.foot) : null;
+    this.log('timing-graded', { commandId: handle.id, name: handle.name, foot: handle.foot,
+                                timingError: Math.round(error * 100) / 100, problem: problem ? problem.text : null,
+                                prepGiven: prepStep !== null, prepProblem: prep ? prep.text : null,
+                                prepGap: prepStep !== null ? Math.round((exactStep - prepStep) * 100) / 100 : null });
+    if (!problem && !prep) return;
+    if (problem && handle.action !== 'cover') this.addDisorder(problem.drift);
+    const texts = [problem && problem.text, prep && prep.text].filter(Boolean);
+    this.feedback('⚠ ' + handle.name + ' — ' + texts.join('; ') + '.' + (problem ? ' The flight is getting ragged.' : ''), 'warn');
   }
 
   stop() {
@@ -694,8 +736,18 @@ class FlightLogic {
 
   // To the Rear (DAFPAM 3.16): a 12-inch step, pivot 180 degrees, a 12-inch step in
   // the new direction, then full steps.
+  // From the halt (user's detachment practice): face about and step off, 12-inch first step.
   cmdToTheRear(cmd) {
-    if (!this.marching) return cmd.label + ' is given while marching. At the halt, use A-bout, HACE.';
+    if (!this.marching) {
+      if (this.columnMovementInProgress()) return 'Finish the column movement first.';
+      const atFront = this.commanderAtFrontOfLine();
+      this.marchers().forEach(p => { p.dir = turnDir(p.dir, 2); });
+      this.relocateGuideIfNeeded();
+      this.commanderStaysOnSide(atFront);
+      this.startMarching();
+      this.shortStepUntil = 1;    // 12-inch step in the new direction, then full steps
+      return 'OK:' + cmd.say + ' (face about and step off)';
+    }
     const r = this.cmdFlank(cmd);
     if (r.startsWith('OK:')) {
       this.commanderStaysOnSide(false);
@@ -711,6 +763,10 @@ class FlightLogic {
   //  - Column Right/Left: then the whole flight half steps until Forward, HARCH.
   //  - Column Half Right/Left: the full step resumes on its own once ranks are abreast.
   cmdColumn(cmd) {
+    if (cmd.notInvertedColumn && this.formationType() === 'inverted column') {
+      return cmd.label + ' cannot be given in inverted column: column movements are made from column (DAFPAM 4.11). ' +
+             'Put the element leaders back at the head first: To the Rear, HARCH or Counter, HARCH.';
+    }
     const r = this.turnColumn(cmd.turn, { incline: false });
     if (r) return r;
     if (Math.abs(cmd.turn) === 1) {
@@ -954,8 +1010,31 @@ class FlightLogic {
   // ---------- Giving a command ----------
   // options: { voice: true, ageSeconds } for spoken commands (see voice.js)
   giveCommand(text, options = {}) {
-    const cleaned = cleanUpCommand(text, options.voice);
+    let cleaned = cleanUpCommand(text, options.voice);
     if (!cleaned) return;
+    const stepSecNow = this.doubleTime ? this.doubleStepSeconds : this.stepSeconds;
+    const saidStep = age => this.marching ? this.realSteps() - (age || 0) / stepSecNow : null;
+    // When the preparatory command was said (cadence position), if known
+    let prepStep = options.prepAgeSeconds !== undefined && options.prepAgeSeconds !== null ? saidStep(options.prepAgeSeconds) : null;
+
+    // 0. Two-part commands: the preparatory command on its own ("Right Flank"), then the command
+    //    of execution ("HARCH") within a few seconds. Both moments are graded (DAFPAM 3.9.2).
+    if (this.heldPrep && this.clock - this.heldPrep.clock > DRILL.preparatory.holdSeconds) this.heldPrep = null;
+    if (this.heldPrep) {                         // ("HALT" alone is a command too: join it to a held "Flight")
+      const joined = cleanUpCommand(this.heldPrep.text + ' ' + text, options.voice);
+      if (COMMANDS_BY_KEY[joined]) {
+        text = this.heldPrep.text.trim() + ', ' + text.trim();
+        cleaned = joined;
+        prepStep = this.heldPrep.step;
+      }
+    }
+    this.heldPrep = null;
+    if (isPreparatoryOnly(cleaned) && !(this.needCover && cleaned !== DRILL.preparatory.unitWord)) {
+      this.heldPrep = { text, clock: this.clock, step: saidStep(options.ageSeconds) };
+      this.feedback('… ' + text.trim() + ' (preparatory command). Now the command of execution.', 'info');
+      this.log('preparatory', { text });
+      return;
+    }
 
     // 1. After every halt, the next command must be COVER.
     if (this.needCover && letterDifference(cleaned, 'cover') > 1) {
@@ -1023,6 +1102,8 @@ class FlightLogic {
     const foot = this.marching && !this.routeStep ? cmd.foot : null;
     const timing = this.timingError(foot, options.ageSeconds || 0);
     const stepSec = this.doubleTime ? this.doubleStepSeconds : this.stepSeconds;
+    const execStep = saidStep(options.ageSeconds);
+    const prepIssue = foot && prepStep !== null && !options.deferTiming ? prepTimingProblem(prepStep, execStep, foot) : null;
     this.commandAt = this.realSteps() - (options.ageSeconds || 0) / stepSec;   // when it was really given
 
     this.finishGuideMove();
@@ -1047,19 +1128,25 @@ class FlightLogic {
       drift += wrongLetters * SLOPPY_WORD_DRIFT;
       problems.push('sloppy wording ("' + text.trim() + '")');
     }
+    if (prepIssue) problems.push(prepIssue.text);   // graded, but the flight still executes cleanly
     const isCover = cmd.action === 'cover';
     if (!isCover) this.addDisorder(drift);
 
-    const ragged = isCover ? '' : ' The flight is getting ragged.';
+    const ragged = isCover || drift === 0 ? '' : ' The flight is getting ragged.';
     if (problems.length) this.feedback('⚠ ' + name + ' — ' + problems.join('; ') + '.' + ragged, 'warn');
     else this.feedback('✔ ' + name, true);
-    this.log('command', { text, key: cmd.key, name: cmd.say, action: cmd.action, voice: !!options.voice,
+    const id = ++this.commandSeq;
+    this.log('command', { id, text, key: cmd.key, name: cmd.say, action: cmd.action, voice: !!options.voice,
                           foot, timingError: options.deferTiming ? null : Math.round(timing * 100) / 100,
-                          wrongLetters, problems, deferredTiming: !!options.deferTiming });
+                          timingProblem: timingIssue ? timingIssue.text : null,
+                          prepGiven: prepStep !== null, prepProblem: prepIssue ? prepIssue.text : null,
+                          prepGap: prepStep !== null && execStep !== null ? Math.round((execStep - prepStep) * 100) / 100 : null,
+                          wrongLetters, problems, deferredTiming: !!options.deferTiming,
+                          formation: this.formationType(), marching: this.marching });
     this.reportStatus();
     if (!options.deferTiming) return null;
     return {    // handle for judgeTiming
-      name, foot, action: cmd.action, stepAtGive: this.realSteps(),
+      id, name, foot, action: cmd.action, stepAtGive: this.realSteps(),
       stepSec: this.doubleTime ? this.doubleStepSeconds : this.stepSeconds,
       pending: this.pending, pendingOffset: this.pending ? Math.round(this.pending.at) - estimatedStep : 0,
     };

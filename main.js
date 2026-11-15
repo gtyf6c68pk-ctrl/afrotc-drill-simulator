@@ -14,7 +14,9 @@ function startGame() {
     scene: [MenuScene, DrillPadScene, CampusScene],   // the first one (Menu) opens first
   });
   wireUi();
-  if (LINK.scene === 'Settings') { LINK.scene = null; setTimeout(() => showScreen('settings'), 50); }
+  if (LINK.scene === 'Settings' || LINK.scene === 'Reference') {     // HTML screens (no map)
+    const name = LINK.scene.toLowerCase(); LINK.scene = null; setTimeout(() => showScreen(name), 50);
+  }
 }
 
 // Wait for the fonts so map labels are drawn in the right font (but never more than 1.5 s)
