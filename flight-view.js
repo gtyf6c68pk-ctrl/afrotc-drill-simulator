@@ -1,7 +1,7 @@
 // =====================================================================
 //  flight-view.js: DRAWS a FlightLogic with Phaser (2D, top-down).
 //  All the rules live in flight-logic.js; this file only turns positions into pictures.
-//    const view = new FlightView(scene, flight, layer);   // layer is optional
+//    const view = new FlightView(scene, flight, layer, { guidonColor, label });   // layer, options optional
 //    view.sync(dt);   // call every frame after flight.update(dt)
 //
 //  Each person is a small, BLOCKY (pixel-art) top-down figure in OCPs (camouflage): boots,
@@ -23,10 +23,17 @@ const ROLE_OUTLINE = { leader: 0xffd166, commander: 0xffffff };   // element lea
 const PX = 1.5;   // size of one "pixel" block of a cadet, in map units
 
 class FlightView {
-  constructor(scene, flight, layer) {
+  constructor(scene, flight, layer, opts) {
     this.scene = scene;
     this.flight = flight;
     this.layer = layer || null;
+    this.opts = opts || {};
+    this.guidonColor = this.opts.guidonColor || 0xd62828;
+    if (this.opts.label) {                       // e.g. "B Flight", above the flight
+      this.label = scene.add.text(0, 0, this.opts.label, { fontFamily: 'Inter, sans-serif', fontStyle: '800', fontSize: '30px',
+        color: '#ffffff', stroke: '#10161e', strokeThickness: 6 }).setOrigin(0.5, 1).setDepth(12);
+      if (this.layer) this.layer.add(this.label);
+    }
     this.sprites = new Map();   // person -> { box, shadow, leftBoot, rightBoot, leftArm, rightArm, offset, angle }
     this.generation = -1;
     this.sync(1);
@@ -41,6 +48,10 @@ class FlightView {
     const info = this.flight.footInfo();        // null at the halt
     const now = this.scene.time.now / 1000;
     const k = 1 - Math.exp(-dt * 16);           // turn smoothing (a quarter turn takes ~0.15 s)
+    if (this.label) {                            // name label just north of the flight
+      const ps = this.flight.everyone();
+      this.label.setPosition(ps.reduce((a, p) => a + p.x, 0) / ps.length, Math.min(...ps.map(p => p.y)) - 26);
+    }
 
     this.sprites.forEach((s, p) => {
       const x = p.x + p.off.x, y = p.y + p.off.y;
@@ -152,8 +163,9 @@ class FlightView {
     if (kind === 'guide') {                       // the guidon: red pennant on a pole (blocky)
       flag = add();
       block(flag, 0x3b2a1a, 7, -14, 1, 16);
-      block(flag, 0xd62828, 8, -14, 6, 2); block(flag, 0xd62828, 8, -12, 4, 2); block(flag, 0xd62828, 8, -10, 2, 1);
-      block(flag, 0xff5a4a, 8, -14, 6, 1, 0.8);
+      const gc = this.guidonColor;
+      block(flag, gc, 8, -14, 6, 2); block(flag, gc, 8, -12, 4, 2); block(flag, gc, 8, -10, 2, 1);
+      block(flag, 0xffffff, 8, -14, 6, 1, 0.3);
       block(flag, 0xd9b44a, 7, -15, 1, 1);        // finial
       parts.push(flag);
     }

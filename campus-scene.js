@@ -45,7 +45,7 @@ class CampusScene extends Phaser.Scene {
       start: campusStart(),
       startDir: campusStart().dir,
       areaName: 'campus map',
-      obstacleAt: (x, y) => this.buildingAt(x, y),
+      obstacleAt: (x, y) => this.buildingAt(x, y) || this.npcAt(x, y),
       sidewalkEdge: (x, y, h) => this.sidewalkEdge(x, y, h),
       stairsAt: (x, y) => this.stairsAt(x, y),
       intersections: this.intersections,
@@ -59,6 +59,7 @@ class CampusScene extends Phaser.Scene {
     });
     this.flightView = new FlightView(this, this.flight, this.worldLayer);
     setActiveFlight(this.flight);
+    this.addNpcFlights(settings.npcFlights || 0);
     this.events.once('shutdown', () => {
       setActiveFlight(null); activeCamera = null;
       this.scale.off('resize', this.placeMinimap, this);
@@ -99,6 +100,46 @@ class CampusScene extends Phaser.Scene {
 
     giveLinkCommands(this, this.flight);   // commands/fast-forward from the page address
     this.updateMinimap();
+  }
+
+  // Computer-controlled flights (npc-commander.js) marching the sidewalks with real drill commands
+  addNpcFlights(count) {
+    this.npcs = [];
+    if (!count) return;
+    const W = CAMPUS.width, H = CAMPUS.height;
+    this.npcNet = PathNetwork.fromCampus(this);
+    if (!this.npcNet.liveEdges.length) return;
+    const all = () => [this.flight, ...this.npcs.map(n => n.flight)];
+    const used = [flightCenter(this.flight)];
+    const names = ['B Flight', 'C Flight', 'D Flight', 'E Flight'];
+    let seed = LINK.seed;                               // ?seed=N: repeatable starting spots (screenshots)
+    const rand = seed ? () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; } : Math.random;
+    for (let i = 0; i < count; i++) {
+      const f = new FlightLogic({ bounds: { x0: 15, y0: 15, x1: W - 15, y1: H - 15 }, start: { x: 0, y: 0 }, areaName: 'campus map',
+        obstacleAt: (x, y) => this.buildingAt(x, y), stairsAt: (x, y) => this.stairsAt(x, y),
+        cadence: settings.cadence, elements: 3, elementSize: 4, disorder: 0 });
+      f.npcName = names[i];
+      const pl = NpcCommander.place(f, this.npcNet, rand, used);
+      if (!pl) break;
+      used.push(flightCenter(f));
+      const npc = new NpcCommander(f, this.npcNet, { name: names[i], others: all, rand });
+      npc.start(pl);
+      npc.view = new FlightView(this, f, this.worldLayer, { guidonColor: NPC_GUIDON_COLORS[i], label: names[i] });
+      npc.dot = this.add.circle(0, 0, 240, NPC_GUIDON_COLORS[i]);   // minimap marker
+      this.cameras.main.ignore(npc.dot);
+      this.npcs.push(npc);
+    }
+  }
+
+  // Move the computer-controlled flights (also used by the page-address fast-forward)
+  stepOthers(dt) { (this.npcs || []).forEach(n => { n.update(dt); n.flight.update(dt); }); }
+
+  // Someone from another flight at (x, y)? (the player's flight stops instead of walking into them)
+  npcAt(x, y) {
+    for (const n of this.npcs || []) {
+      if (n.flight.everyone().some(p => Math.abs(p.x - x) < 14 && Math.abs(p.y - y) < 14)) return n.name;
+    }
+    return null;
   }
 
   // Minimap size/position follow the window size; the HTML frame (#minimapFrame) is drawn around it
@@ -332,6 +373,11 @@ class CampusScene extends Phaser.Scene {
     const dt = deltaMs / 1000;
     this.flight.update(dt);
     this.flightView.sync(dt);
+    this.stepOthers(dt);
+    (this.npcs || []).forEach(n => {
+      n.view.sync(dt);
+      const c = flightCenter(n.flight); n.dot.setPosition(c.x, c.y);
+    });
     this.metronome.update(dt);
     this.camera.update(dt);
     this.updateMinimap();

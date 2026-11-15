@@ -15,6 +15,7 @@
 //   commands: commands to give right away, separated by |  (used by tools/screenshot.sh)
 //   scenario: which scenario to run on the drill pad (see scenarios.js), e.g. sequence30
 //   finish:   1 = end the session right after `advance` and show the results (screenshots)
+//   seed:     repeatable random choices (e.g. where the computer-controlled flights start)
 //   at:       look at this spot instead of following the flight, in meters from the map's top-left (e.g. at=520,210)
 //   advance:  fast-forward the simulation this many seconds when the map opens (screenshots;
 //             headless Chrome doesn't run the game's frame loop, so time has to be stepped by hand)
@@ -25,7 +26,8 @@ const LINK = (() => {
            commands: q.get('commands') ? q.get('commands').split('|') : [],
            advance: q.get('advance') ? Number(q.get('advance')) : 0,
            at: q.get('at') ? q.get('at').split(',').map(Number) : null,
-           scenario: q.get('scenario'), finish: q.get('finish') === '1' };
+           scenario: q.get('scenario'), finish: q.get('finish') === '1',
+           seed: q.get('seed') ? Number(q.get('seed')) : null };
 })();
 
 // Give the commands from the page address (once, the first time a map opens). Call it at the
@@ -38,11 +40,18 @@ function giveLinkCommands(scene, flight) {
     list.forEach((c, i) => scene.time.delayedCall(300 + i * 1200, () => routeCommand(c)));
     return;
   }
-  const step = s => { for (let i = 0; i < s * 60; i++) { flight.update(1 / 60); if (scene.metronome) scene.metronome.update(1 / 60); } };
+  const step = s => {
+    for (let i = 0; i < s * 60; i++) {
+      flight.update(1 / 60);
+      if (scene.stepOthers) scene.stepOthers(1 / 60);           // computer-controlled flights
+      if (scene.metronome) scene.metronome.update(1 / 60);
+    }
+  };
   let used = 0;
   list.forEach(c => { routeCommand(c); step(1.2); used += 1.2; });
   step(Math.max(0, advance - used));
   if (scene.flightView) scene.flightView.sync(1);
+  (scene.npcs || []).forEach(n => n.view.sync(1));
   if (scene.camera) scene.camera.update(1, true);
   if (scene.update) scene.update(0, 16);   // one normal frame, so the per-frame code is exercised too
   if (activeRun) { activeRun.update(0); updateRunHud(true); }

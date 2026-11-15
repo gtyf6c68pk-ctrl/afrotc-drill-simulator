@@ -35,6 +35,8 @@ const SETTING_OPTIONS = [
     show: v => v + ' s' },
   { key: 'tick', label: 'Tick sound on each step', values: ['off', 'on'],
     show: v => v === 'on' ? 'On' : 'Off' },
+  { key: 'npcFlights', label: 'Other flights on campus (computer-controlled)', values: [0, 1, 2, 3, 4],
+    show: v => v === 0 ? 'None' : String(v) },
 ];
 
 const DEFAULT_SETTINGS = {
@@ -43,6 +45,7 @@ const DEFAULT_SETTINGS = {
   elementSize: 5,
   padSize: 'medium',
   campusStart: 'lowder',
+  npcFlights: 3,
   disorder: 'normal',
   cdrSide: 'left',
   metronome: 'on',
