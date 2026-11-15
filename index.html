@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AFROTC Drill Simulator</title>
+  <link rel="stylesheet" href="fonts.css">
+  <style>
+    /* ---------- Design system: one set of colors, type and spacing for every screen ---------- */
+    :root {
+      --bg: #0d1218; --panel: rgba(14, 20, 28, 0.82); --panel-solid: #141c26; --line: rgba(255, 255, 255, 0.09);
+      --text: #e8edf2; --muted: #93a1b0; --accent: #4fa3ff; --accent-dark: #2a6fbf;
+      --gold: #ffd166; --good: #6be38a; --bad: #ff7a6e; --warn: #ffd166; --ocp: #a59a77;
+      --pixel: 'Pixelify Sans', 'Courier New', monospace; --sans: 'Inter', -apple-system, 'Segoe UI', Arial, sans-serif;
+      --r: 6px; --gap: 12px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: var(--sans); }
+    #game { position: fixed; inset: 0; }
+    #game canvas { display: block; image-rendering: pixelated; }
+    #vignette { position: fixed; inset: 0; pointer-events: none;
+                background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.45) 100%); }
+    .hidden { display: none !important; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r);
+             backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); }
+
+    /* Buttons: chunky "pixel" buttons that press down (old school) with smooth hover (new school) */
+    .btn { font: 600 14px var(--sans); color: var(--text); background: #2a3442; border: none; border-radius: 4px;
+           padding: 9px 14px; cursor: pointer; box-shadow: 0 3px 0 #161d26; transition: background .12s, transform .06s, box-shadow .06s; }
+    .btn:hover { background: #354253; }
+    .btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #161d26; }
+    .btn.primary { background: var(--accent-dark); box-shadow: 0 3px 0 #17406e; }
+    .btn.primary:hover { background: #3482d9; }
+    .btn.on { background: #2f7a4a; box-shadow: 0 3px 0 #1b4a2c; }
+    .btn.icon { padding: 9px 11px; min-width: 38px; }
+
+    /* ---------- Menu and settings screens ---------- */
+    .screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; overflow: auto; }
+    .menu { width: min(1040px, 100%); text-align: center; }
+    .logo { font: 700 clamp(34px, 6vw, 64px)/1.05 var(--pixel); color: #fff; text-shadow: 0 4px 0 #1d2a3a, 0 0 24px rgba(79, 163, 255, 0.35); }
+    .logo small { display: block; font-size: 0.42em; color: var(--gold); letter-spacing: 4px; margin-bottom: 8px; }
+    .tagline { color: var(--muted); margin: 10px 0 28px; font-size: 16px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 22px; }
+    .card { text-align: left; padding: 18px; cursor: pointer; transition: transform .12s, border-color .12s; position: relative; }
+    .card:hover { transform: translateY(-3px); border-color: rgba(79, 163, 255, 0.6); }
+    .card.soon { opacity: 0.55; cursor: default; }
+    .card.soon:hover { transform: none; border-color: var(--line); }
+    .card .icon { font: 700 30px var(--pixel); width: 52px; height: 52px; display: grid; place-items: center;
+                  background: #1f2a37; border-radius: 4px; box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.3); margin-bottom: 12px; }
+    .card h3 { margin: 0 0 6px; font: 800 20px var(--sans); letter-spacing: -0.01em; }
+    .card p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.45; }
+    .badge { position: absolute; top: 14px; right: 14px; font: 600 11px var(--sans); padding: 3px 8px; border-radius: 99px;
+             background: #2a3442; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+    .badge.go { background: rgba(107, 227, 138, 0.15); color: var(--good); }
+    .menu-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    .fineprint { margin-top: 22px; color: #6d7a88; font-size: 12px; }
+
+    .settings { width: min(720px, 100%); padding: 24px 26px; }
+    .settings h2 { margin: 0 0 4px; font: 800 28px var(--sans); letter-spacing: -0.01em; }
+    .settings .sub { color: var(--muted); margin: 0 0 18px; font-size: 14px; }
+    .setting { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+    .setting label { font-weight: 600; font-size: 14.5px; }
+    .seg { display: inline-flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; max-width: 430px; }
+    .seg button { font: 600 13.5px var(--sans); color: var(--muted); background: #1f2833; border: 1px solid var(--line);
+                  border-radius: 4px; padding: 6px 10px; cursor: pointer; }
+    .seg button.sel { color: #fff; background: var(--accent-dark); border-color: transparent; box-shadow: 0 2px 0 #17406e; }
+    .settings-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+
+    /* ---------- In-game HUD ---------- */
+    #hud { position: fixed; inset: 0; pointer-events: none; }
+    #hud > * { pointer-events: auto; }
+    #hud-top-left { position: absolute; top: 14px; left: 14px; padding: 10px 14px; max-width: min(560px, 55vw); }
+    #hud-mode { font: 700 16px var(--sans); color: #fff; }
+    #status { color: #b9c4cf; font-size: 14px; margin-top: 4px; line-height: 1.4; }
+    #hud-attribution { color: #8592a0; font-size: 11.5px; margin-top: 6px; }
+    #hud-attribution:empty { display: none; }
+    #hud-top-right { position: absolute; top: 14px; right: 14px; display: flex; gap: 8px; align-items: center; }
+    .zoom-group { display: flex; align-items: center; gap: 4px; padding: 4px; }
+    #zoomLabel { font: 600 13px var(--sans); color: var(--muted); min-width: 44px; text-align: center; }
+
+    #log { position: absolute; left: 14px; bottom: 100px; width: min(560px, 60vw); display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+    .msg { padding: 8px 12px; font-size: 14px; line-height: 1.35; border-left: 4px solid var(--accent); transition: opacity .6s; }
+    .msg.good { border-left-color: var(--good); } .msg.bad { border-left-color: var(--bad); } .msg.warn { border-left-color: var(--warn); }
+    .msg.old { opacity: 0.5; }
+
+    #hud-bottom { position: absolute; left: 14px; right: 14px; bottom: 14px; display: flex; gap: var(--gap); align-items: flex-end; pointer-events: none; }
+    #hud-bottom > * { pointer-events: auto; }
+    #metronome { width: 200px; height: 84px; box-sizing: content-box; image-rendering: pixelated; flex: none; }
+    #commandBar { flex: 1; display: flex; gap: 8px; align-items: center; padding: 8px; flex-wrap: wrap; }
+    #commandBox { flex: 1; min-width: 200px; font: 500 16px var(--sans); color: var(--text); background: #0f151d; border: 1px solid #2c3846;
+                  border-radius: 4px; padding: 10px 12px; outline: none; }
+    #commandBox:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(79, 163, 255, 0.18); }
+    #voiceStatus { width: 100%; font-size: 13.5px; color: var(--muted); padding: 0 4px; }
+    #voiceStatus:empty { display: none; }
+    #voiceStatus.good { color: var(--good); } #voiceStatus.bad { color: var(--bad); } #voiceStatus.warn { color: var(--warn); }
+
+    #reference { position: absolute; top: 70px; right: 14px; bottom: 96px; width: 360px; overflow: auto; padding: 16px 18px;
+                 transition: transform .25s ease, opacity .25s; }
+    #reference.closed { transform: translateX(110%); opacity: 0; pointer-events: none; }
+    #reference h3 { font: 800 16px var(--sans); margin: 14px 0 6px; }
+    #reference h3:first-child { margin-top: 0; }
+    #reference p, #reference li { color: #d3dbe3; font-size: 14px; line-height: 1.5; }
+    #reference ul { padding-left: 18px; margin: 4px 0; }
+    code { background: #1f2a37; padding: 1px 5px; border-radius: 3px; font-size: 12.5px; color: #fff; }
+    #minimapFrame { position: fixed; border: 2px solid rgba(255, 255, 255, 0.75); border-radius: 4px; pointer-events: none;
+                    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45); }
+    #toasts { position: fixed; top: 80px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+    .toast { padding: 10px 16px; font: 600 14px var(--sans); animation: toastIn .25s ease; }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+    @media (max-width: 760px) { #reference { width: calc(100% - 28px); } #log { bottom: 150px; } }
+  </style>
+</head>
+<body>
+  <div id="game"></div>
+  <div id="vignette"></div>
+
+  <!-- ===== Main menu ===== -->
+  <div id="screen-menu" class="screen hidden">
+    <div class="menu">
+      <div class="logo"><small>AFROTC</small>DRILL SIMULATOR</div>
+      <div class="tagline">Lead your flight as flight commander. Command voice, correct foot, every time.</div>
+      <div class="cards">
+        <div class="card panel" data-open="DrillPad">
+          <span class="badge go">Ready</span><div class="icon">▦</div>
+          <h3>Practice</h3><p>Drill pad. Every command, no grading. Learn the timing with the metronome.</p>
+        </div>
+        <div class="card panel soon">
+          <span class="badge">Phase 7</span><div class="icon">⏱</div>
+          <h3>FDE</h3><p>Flight Drill Evaluation: all 20 movements in under 5:00, in bounds, in the best order.</p>
+        </div>
+        <div class="card panel soon">
+          <span class="badge">Phase 9</span><div class="icon">⚔</div>
+          <h3>Tanks</h3><p>Out-maneuver enemy flights and hit their flank before they hit yours.</p>
+        </div>
+        <div class="card panel" data-open="Campus">
+          <span class="badge go">Preview</span><div class="icon">⌖</div>
+          <h3>Live</h3><p>Campus missions (Phase 11). For now: free march on the Auburn campus, stairs and intersections included.</p>
+        </div>
+      </div>
+      <div class="menu-actions">
+        <button class="btn" id="menuSettings">⚙ Settings</button>
+        <button class="btn" id="menuCommands">? Command reference</button>
+      </div>
+      <div class="fineprint">Drill per DAFPAM 34-1203 and AFROTCI 36-2011 Vol 1. All names in the game are fictional.
+        Map data © OpenStreetMap contributors · Tiles: Kenney.nl · Full credits in CREDITS.md</div>
+    </div>
+  </div>
+
+  <!-- ===== Settings ===== -->
+  <div id="screen-settings" class="screen hidden">
+    <div class="settings panel">
+      <h2>Settings</h2>
+      <p class="sub">Saved on this computer. Changes apply the next time a map opens.</p>
+      <div id="settingsRows"></div>
+      <div class="settings-actions">
+        <button class="btn" id="settingsDefaults">Restore defaults</button>
+        <button class="btn primary" id="settingsBack">◀ Back</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== In-game HUD (shown on the maps) ===== -->
+  <div id="hud" class="hidden">
+    <div id="hud-top-left" class="panel">
+      <div id="hud-mode"></div>
+      <div id="status"></div>
+      <div id="hud-attribution"></div>
+    </div>
+    <div id="hud-top-right">
+      <div class="zoom-group panel">
+        <button class="btn icon" id="btnZoomOut" title="Zoom out (mouse wheel)">−</button>
+        <span id="zoomLabel">100%</span>
+        <button class="btn icon" id="btnZoomIn" title="Zoom in (mouse wheel)">+</button>
+      </div>
+      <button class="btn on" id="btnFollow" title="Camera follows the flight (F). Drag the map to look around.">◎ Follow</button>
+      <button class="btn" id="btnRef" title="Command reference">? Commands</button>
+      <button class="btn" id="btnMenu" title="Main menu (Esc)">☰ Menu</button>
+    </div>
+    <div id="log"></div>
+    <div id="hud-bottom">
+      <canvas id="metronome" class="panel" width="200" height="84"></canvas>
+      <div id="commandBar" class="panel">
+        <input id="commandBox" placeholder="Type a command, e.g. Forward, HARCH  — Enter to give it" autocomplete="off" spellcheck="false">
+        <button class="btn primary" id="sendBtn">Give</button>
+        <button class="btn" id="voiceBtn">🎤 Voice</button>
+        <button class="btn" id="resetBtn" title="Re-form the flight">Reset</button>
+        <div id="voiceStatus"></div>
+      </div>
+    </div>
+    <aside id="reference" class="panel closed">
+      <h3>Commands</h3>
+      <!-- Built automatically from drill-rules.js (see buildCommandList in ui.js) -->
+      <div id="commandList"></div>
+      <h3>Command voice</h3>
+      <p>Use the inflection chart: <b>HARCH</b> and <b>HACE</b>. Typed MARCH and FACE are not accepted.
+        Capital letters and commas are optional. Give each command as the correct heel strikes (watch the metronome).</p>
+      <h3>Half step &amp; route step</h3>
+      <p>After a column movement or Counter, HARCH the flight half steps until <code>Forward, HARCH</code>; no flanks
+        or To the Rear while half stepping. At route step / at ease only inclines and <code>Flight, Ten-HUT</code>.</p>
+      <h3>Disorder &amp; COVER</h3>
+      <p>Wrong-foot, off-beat or sloppy commands make cadets drift. Halt, then <code>COVER</code>. After every halt the
+        next command must be COVER.</p>
+      <h3>Voice</h3>
+      <p>Start with <b>Start Drill Simulator.command</b> (or the website link), click <b>🎤 Voice</b> and allow the
+        microphone. The offline engine runs on this computer; no audio leaves it.</p>
+      <h3>Campus</h3>
+      <p>Buildings, trees, bike racks, fences and walls stop the flight. Take <b>stairs at route step</b>.
+        The status shows intersections you approach or cross.</p>
+      <h3>Who's who</h3>
+      <ul>
+        <li>Everyone wears <b>OCPs</b>; arms and boots move in step.</li>
+        <li><b style="color:var(--gold)">Gold outline</b>: element leaders</li>
+        <li><b style="color:#ff6b6b">Red pennant</b>: guide (guidon)</li>
+        <li><b>White outline</b>: flight commander (you)</li>
+      </ul>
+      <h3>Camera</h3>
+      <p>Mouse wheel or pinch to zoom, drag to look around, <b>F</b> or ◎ Follow to follow the flight again, <b>Esc</b> for the menu.</p>
+    </aside>
+  </div>
+  <div id="minimapFrame" class="hidden"></div>
+  <div id="toasts"></div>
+
+  <script src="assets/phaser/phaser.min.js"></script>   <!-- Phaser 3.80.1 (MIT), bundled so the game works offline -->
+  <!-- Our simulator code (order matters: shared code first, then screens, then start-up) -->
+  <script src="settings.js"></script>
+  <script src="drill-rules.js"></script>
+  <script src="flight-logic.js"></script>
+  <script src="flight-view.js"></script>
+  <script src="metronome.js"></script>
+  <script src="ui.js"></script>
+  <script src="kenney-tiles.js"></script>
+  <script src="world-painter.js"></script>
+  <script src="camera-controller.js"></script>
+  <script src="menu-scene.js"></script>
+  <script src="drill-pad-scene.js"></script>
+  <script src="campus-data.js"></script>
+  <script src="maps/campus-features.js"></script>
+  <script src="campus-scene.js"></script>
+  <script src="voice.js"></script>
+  <script src="voice-vosk.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
