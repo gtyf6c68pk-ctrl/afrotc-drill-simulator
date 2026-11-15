@@ -82,7 +82,8 @@ class PathNetwork {
   // at a corner, and needs ~12 m between two corners (a column movement takes ~8 m to finish).
   // Returns a list of { from, to, edge } steps, or null.
   route(from, facing, to, avoidEdge) {
-    const MIN_LEG = 390;
+    if (from === null || from === undefined || to === null || to === undefined) return null;
+    const MIN_LEG = this.minLeg || 390;
     const key = (n, d, j) => (n * 8 + d) * 2 + (j ? 1 : 0);
     const dist = new Map(), prev = new Map(), open = [];
     const T = this.nodes[to];
@@ -193,6 +194,7 @@ class PathNetwork {
   // Drill pad: lanes every `spacing` units inside `bounds` (straight, diagonal-free)
   static grid(bounds, spacing) {
     const net = new PathNetwork();
+    net.minLeg = Math.min(390, spacing * 1.9);
     const xs = [], ys = [];
     for (let x = bounds.x0; x <= bounds.x1 + 0.1; x += spacing) xs.push(x);
     for (let y = bounds.y0; y <= bounds.y1 + 0.1; y += spacing) ys.push(y);
@@ -292,13 +294,13 @@ class NpcCommander {
   }
 
   // Put the flight on a random segment of the network, facing along it, centered on it
-  static place(flight, net, rand, avoid) {
+  static place(flight, net, rand, avoid, minDist) {
     for (let tries = 0; tries < 200; tries++) {
       const e = net.liveEdges[Math.floor(rand() * net.liveEdges.length)];
-      if (e.len < 260) continue;
+      if (e.len < Math.min(260, (net.minLeg || 390) * 0.5)) continue;
       const fromN = rand() < 0.5 ? e.a : e.b, A = net.nodes[fromN], B = net.nodes[net.other(e, fromN)];
       const t = 0.55, x = A.x + (B.x - A.x) * t, y = A.y + (B.y - A.y) * t;
-      if (avoid && avoid.some(p => Math.hypot(p.x - x, p.y - y) < 600)) continue;
+      if (avoid && avoid.some(p => Math.hypot(p.x - x, p.y - y) < (minDist || 600))) continue;
       const dir = dirOf(B.x - A.x, B.y - A.y);
       flight.opts.start = { x, y }; flight.opts.startDir = dir;
       flight.reset();
@@ -320,18 +322,18 @@ class NpcCommander {
   // Add a route from the end of the last leg to a new destination (random, or the goal)
   extendRoute(avoidEdge) {
     const last = this.legs[this.legs.length - 1];
-    if (!last) return false;
+    if (!last || last.aim) return false;
     const live = this.net.live;
     for (let tries = 0; tries < 12; tries++) {
       let dest;
-      if (this.goal) {
+      if (this.goal && tries < 2) {                                 // head for the goal (else roam)
         dest = live.reduce((b, n) => Math.hypot(n.x - this.goal.x, n.y - this.goal.y) < Math.hypot(b.x - this.goal.x, b.y - this.goal.y) ? n : b, live[0]);
       } else {
         dest = live[Math.floor(this.rand() * live.length)];
       }
       if (dest.id === last.endNode) continue;
       const steps = this.net.route(last.endNode, last.dir, dest.id, avoidEdge);
-      if (!steps || !steps.length) { if (this.goal) return false; continue; }
+      if (!steps || !steps.length) continue;
       // ...and only to a destination the flight can march on from (no pocket it can't turn out of)
       const endStep = steps[steps.length - 1], A = this.net.nodes[endStep.from], B = this.net.nodes[endStep.to];
       const onward = live[Math.floor(this.rand() * live.length)];
@@ -340,6 +342,36 @@ class NpcCommander {
       return true;
     }
     return false;
+  }
+
+  // Head for a point (Phase 9: chase / evade). Keeps the leg it's on (and the next one if the turn
+  // into it is close), and re-plans the rest. Call it every few seconds with a fresh goal.
+  setGoal(goal) {
+    this.goal = goal;
+    if (!this.legs.length || this.backOff || this.turnAround) return;
+    if (this.legs[0].aim) {                       // back from an attack run: rejoin the nearest lane ahead
+      const f = this.flight, c = flightCenter(f), h = f.mainDir(), u = DIRS[h];
+      const ahead = this.net.live.filter(n => (n.x - c.x) * u.x + (n.y - c.y) * u.y > 300)
+        .sort((a, b) => Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y))[0];
+      if (!ahead) return;
+      const d = dirOf(ahead.x - c.x, ahead.y - c.y), v = DIRS[d];
+      this.legs = [{ dir: d, x1: ahead.x - v.x * 2000, y1: ahead.y - v.y * 2000, x2: ahead.x, y2: ahead.y, endNode: ahead.id, edge: null, edges: [], w: 0 }];
+      this.extendRoute();
+      return;
+    }
+    this.legs.splice(this.nearCorner ? 2 : 1);
+    this.extendRoute();
+  }
+
+  // Attack run (Phase 9): march straight through `point` along the nearest of the 8 directions
+  // (column movements / inclines line the flight up on it). The route network is left behind.
+  aim(point) {
+    const c = flightCenter(this.flight);
+    const d = dirOf(point.x - c.x, point.y - c.y), u = DIRS[d];
+    this.goal = point;
+    if (this.backOff || this.turnAround || this.flight.columnMovementInProgress()) return;
+    this.legs = [{ dir: d, x1: point.x - u.x * 2000, y1: point.y - u.y * 2000, x2: point.x + u.x * 2000, y2: point.y + u.y * 2000,
+                   endNode: null, edge: null, edges: [], w: 0, aim: true }];
   }
 
   // Add one segment; straight continuations join the previous leg (one long line)
@@ -385,7 +417,7 @@ class NpcCommander {
     const lats = mine.map(p => p.x * r.x + p.y * r.y);
     const lo = Math.min(...lats) - 30, hi = Math.max(...lats) + 30;
     for (const other of this.opts.others()) {
-      if (other === f) continue;
+      if (other === f || (this.opts.ignore && this.opts.ignore(other))) continue;
       for (const q of other.everyone()) {
         const along = q.x * h.x + q.y * h.y - front, lat = q.x * r.x + q.y * r.y;
         if (along > -10 && along < this.opts.lookAheadPx && lat > lo && lat < hi) { this.blockDist = along; return other; }
@@ -418,7 +450,7 @@ class NpcCommander {
   // Another flight within ~10 m of the corner we're about to turn at (junctions are taken one at a time)
   cornerTaken(N) {
     for (const other of this.opts.others()) {
-      if (other === this.flight) continue;
+      if (other === this.flight || (this.opts.ignore && this.opts.ignore(other))) continue;
       if (other.everyone().some(q => Math.hypot(q.x - N.x1, q.y - N.y1) < 330)) { this.blockDist = 330; return other; }
     }
     return null;
@@ -526,7 +558,7 @@ class NpcCommander {
     if (!leg) return;
     const startNode = this.net.nodes.find(n => Math.hypot(n.x - leg.x1, n.y - leg.y1) < 1);
     this.legs = [{ dir: (leg.dir + 4) % 8, x1: leg.x2, y1: leg.y2, x2: leg.x1, y2: leg.y1,
-                   endNode: startNode ? startNode.id : leg.endNode, edge: leg.edge, edges: leg.edges || [], w: leg.w }];
+                   endNode: startNode ? startNode.id : leg.endNode, edge: leg.edge, edges: leg.edges || [], w: leg.w, aim: leg.aim }];
     if (legOnly) return;
     this.stats.reroutes++;
     this.extendRoute(leg.edge);

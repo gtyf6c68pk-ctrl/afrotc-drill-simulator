@@ -187,6 +187,7 @@ class ScenarioRun {
       message: this.status === 'timeout' && this.def.timeoutMessage ? this.def.timeoutMessage : null,
     };
     if (this.def.efficientOrder) res.debrief = this.debrief(res);
+    if (this.extra) res.tanks = this.extra();   // mode-specific results (Tanks)
     return res;
   }
 

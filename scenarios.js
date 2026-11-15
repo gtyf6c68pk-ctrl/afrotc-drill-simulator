@@ -70,6 +70,32 @@ const SCENARIOS = {
       'Column movements end in a half step and need Forward, HARCH; plan them so that Forward also counts toward the card.',
     ],
   },
+
+  // TANKS (Phase 9): snake-style flanking game. Rules = the user's defaults until the Phase 9 review.
+  tanks: {
+    id: 'tanks', title: 'Tanks', mode: 'Tanks', map: 'DrillPad', hints: false,
+    blurb: 'Hit enemy flights in the flank with your front before they hit yours. 3 lives, 3 waves.',
+    pad: { w: 64, h: 64 },                       // arena = the whole pad (steps); your flight = Settings size
+    start: null, timer: null, objectives: [],
+    tanks: {
+      lives: 3,
+      contactPx: 26,              // people closer than this = the flights touched
+      frontDepthPx: 12,           // the front rank (how deep "the front" of a flight is)
+      edgeMarginPx: 20,           // closer than this to the arena edge = left the arena
+      safeSeconds: 4,             // after losing a life
+      laneSpacingSteps: 10, laneInsetSteps: 8,   // the lanes enemy flights march on
+      dodgeRangePx: 300,          // an enemy in front of you within this distance tries to get away
+      huntOffsetPx: 80,           // enemies aim this far beside your flank, then turn in
+      attackRangePx: 520,         // within this distance they make the attack run
+      aimEdgePx: 140,             // no attack runs toward a point this close to the arena edge
+      enemyNames: ['B Flight', 'C Flight', 'D Flight'],
+      waves: [                    // speed = enemy cadence / your cadence; replan = how often they re-think
+        { enemies: 3, speed: 0.75, replanSeconds: 5, leadSteps: 0 },
+        { enemies: 3, speed: 0.9, replanSeconds: 3.5, leadSteps: 4 },
+        { enemies: 3, speed: 1.0, replanSeconds: 2.5, leadSteps: 8 },
+      ],
+    },
+  },
 };
 
 // Voice phrases for the FDE report in / out (the offline voice engine only listens for known phrases)

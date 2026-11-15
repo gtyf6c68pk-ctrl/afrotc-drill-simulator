@@ -101,6 +101,7 @@ function setPlanningControls(onTurn) {
 // ---------- Scenarios (scenario.js): objective tracker, Practice coach, results ----------
 let currentScenario = 'practice';   // which scenario the drill pad runs (chosen on the menu)
 let activeRun = null;               // the ScenarioRun on the open map (null on maps without one)
+let activeScene = null;             // the open map's Phaser scene (Tanks reads its game from here)
 let lastResults = null;
 
 // Start a scenario on a map's flight and hook it up to the HUD
@@ -140,6 +141,16 @@ function updateRunHud(force) {
   const clock = t && t.limitSeconds ? formatClock(t.limitSeconds - run.elapsed) : formatClock(run.elapsed);
   const pct = v => v === null ? '–' : v + '%';
   let html = '<div class="row"><b>' + esc(def.title) + '</b><span class="clock">' + clock + '</span></div>';
+  // Tanks: lives, wave, score
+  const tg = activeScene && activeScene.tanks;
+  if (tg) {
+    html += '<div class="stats">Lives <b style="color:var(--bad)">' + '♥'.repeat(Math.max(0, tg.lives)) + '</b>' +
+            '<span class="na">' + '♥'.repeat(Math.max(0, tg.rules.lives - tg.lives)) + '</span> · Wave <b>' + tg.wave + ' / ' + tg.rules.waves.length +
+            '</b> · Flanked <b>' + tg.score + '</b> · Enemies left <b>' + tg.aliveEnemies().length + '</b></div>' +
+            '<div class="stats">Hit their side with your FRONT. Don\'t let their front hit your side, don\'t meet head-on, stay inside the pad.</div>';
+    $('objective').innerHTML = html;
+    return;
+  }
   // Evaluations: what to do now (planning, report in, clock, report out)
   if (def.reportIn) {
     if (!run.reportedIn) $('btnTurn').classList.toggle('hidden', !planningTurn);
@@ -184,6 +195,7 @@ function showResults(res) {
   const statusText = { complete: 'Complete ✔', timeout: 'Time is up', finished: 'Session finished', running: '',
                        'reported-out': 'Reported out' }[res.status] || res.status;
   if (res.debrief) { showFdeResults(res, statusText); return; }
+  if (res.tanks) { showTanksResults(res); return; }
   let h = '<h2>' + esc(res.title) + '</h2><p class="sub">' + esc(res.mode) + ' · ' + statusText + ' · time ' + formatClock(res.elapsed) + '</p>';
   h += '<div class="tiles">' +
        tile(s.given, 'commands given') +
@@ -247,6 +259,29 @@ function showFdeResults(res, statusText) {
   h += '<h3>Why that order works</h3><ul class="tips">' + d.efficientNotes.map(t => '<li>' + esc(t) + '</li>').join('') + '</ul>';
   h += '<div class="sheet-actions"><button class="btn" id="resultsMenu">☰ Main menu</button>' +
        '<button class="btn primary" id="resultsAgain">↻ Again</button></div>';
+  $('resultsSheet').innerHTML = h;
+  $('resultsMenu').onclick = () => openScene('Menu');
+  $('resultsAgain').onclick = () => openScene('DrillPad');
+  showScreen('results');
+}
+
+// Tanks results
+function showTanksResults(res) {
+  const t = res.tanks, s = res.summary;
+  const tile = (v, l, cls) => '<div class="tile ' + (cls || '') + '"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>';
+  const head = t.status === 'won' ? 'Victory ✔ every wave cleared' : t.status === 'lost' ? 'Out of lives' : 'Game ended';
+  let h = '<h2>Tanks</h2><p class="sub">' + head + ' · time ' + formatClock(t.time) + '</p><div class="tiles">' +
+          tile(t.score, 'enemy flights flanked', t.score ? 'good' : '') +
+          tile(t.wave + ' / ' + t.waves, 'wave reached', t.status === 'won' ? 'good' : '') +
+          tile(t.lives + ' / ' + t.startLives, 'lives left', t.lives ? 'good' : 'bad') +
+          tile(s.given, 'commands given') +
+          tile(s.onTime === null ? '–' : s.onTime + '%', 'on the correct heel', s.onTime === null ? '' : s.onTime >= 90 ? 'good' : 'warn') +
+          tile(s.refused, 'commands refused', s.refused ? 'bad' : 'good') + '</div>';
+  if (t.livesLost.length) h += '<h3>Lives lost</h3><ul class="tips">' + t.livesLost.map(e => '<li>' + formatClock(e.time) + ' — ' + esc(e.reason) + '</li>').join('') + '</ul>';
+  if (t.eliminated.length) h += '<h3>Flanked</h3><ul class="tips">' + t.eliminated.map(e => '<li>' + formatClock(e.time) + ' — ' + esc(e.name) + '</li>').join('') + '</ul>';
+  h += '<h3>Tips</h3><ul class="tips"><li>Flanks (Right/Left Flank, HARCH) turn your whole front 90 degrees in one step: the fastest way to hit a flight passing beside you.</li>' +
+       '<li>Column movements take about 8 steps to finish; start them early.</li><li>To the Rear gets your front away from an enemy front (no head-on).</li></ul>';
+  h += '<div class="sheet-actions"><button class="btn" id="resultsMenu">☰ Main menu</button><button class="btn primary" id="resultsAgain">↻ Again</button></div>';
   $('resultsSheet').innerHTML = h;
   $('resultsMenu').onclick = () => openScene('Menu');
   $('resultsAgain').onclick = () => openScene('DrillPad');
@@ -383,6 +418,7 @@ function wireUi() {
   if (LINK.scenario && SCENARIOS[LINK.scenario]) currentScenario = LINK.scenario;
   document.querySelectorAll('.card[data-open]').forEach(card => { card.onclick = () => openScene(card.dataset.open); });
   $('cardFde').onclick = () => { currentScenario = 'fde'; openScene('DrillPad'); };
+  $('cardTanks').onclick = () => { currentScenario = 'tanks'; openScene('DrillPad'); };
   $('menuSettings').onclick = () => showScreen('settings');
   $('menuCommands').onclick = () => showScreen('reference');
   $('referenceBack').onclick = () => showScreen('menu');

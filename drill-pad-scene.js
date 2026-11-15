@@ -30,11 +30,12 @@ class DrillPadScene extends Phaser.Scene {
 
     // The flight: rules in flight-logic.js, drawing in flight-view.js. Starts in column near the bottom of the pad
     const edge = 15;
-    const elementSize = P ? P.elementSize : settings.elementSize;
+    const elementSize = P && P.elementSize ? P.elementSize : settings.elementSize;
     const flightLength = (elementSize - 1) * DISTANCE_PX;
     const leadY = M + Math.max(60, Math.min(padH * 0.6, padH - 40 - flightLength));
     const start = area && def.start ? { x: area.x0 + def.start.x * STEP_PX, y: area.y0 + def.start.y * STEP_PX }
-                                    : { x: M + padW / 2, y: leadY };
+                : def.tanks ? { x: M + padW / 2, y: M + padH / 2 + 4 * STEP_PX }       // Tanks: the middle of the arena
+                : { x: M + padW / 2, y: leadY };
     this.flight = new FlightLogic({
       bounds: { x0: M + edge, y0: M + edge, x1: M + padW - edge, y1: M + padH - edge },
       start, startDir: def.start ? def.start.dir : 0,
@@ -42,20 +43,22 @@ class DrillPadScene extends Phaser.Scene {
       onFeedback: showFeedback,
       onStatus: showStatus,
       cadence: settings.cadence,
-      elements: P ? P.elements : settings.elements,
+      elements: P && P.elements ? P.elements : settings.elements,
       elementSize,
       cdrSide: settings.cdrSide,
       disorder: DISORDER_LEVELS[settings.disorder],
     });
     this.flightView = new FlightView(this, this.flight);
     setActiveFlight(this.flight);
-    this.events.once('shutdown', () => { setActiveFlight(null); activeCamera = null; activeRun = null; });
+    activeScene = this;
+    this.events.once('shutdown', () => { setActiveFlight(null); activeCamera = null; activeRun = null; activeScene = null; });
 
     setHud({ mode: esc(def.mode) + ' · <b>' + esc(def.title) + '</b>',
              attribution: (area ? 'Cones mark the 40 ft x 40 ft drill area' : 'Drill pad') +
                           ' · each faint square = 5 steps · North is up · Tiles: Kenney.nl' });
     this.run = startRun(def, this.flight);
     this.run.area = area;
+    if (def.tanks) this.startTanks(def);
 
     // Planning period (evaluations): click the pad to place the flight, ↻ to turn it (Vol 1 p. 58:
     // "arrange the flight anywhere on the pad"). Only until the commander reports in.
@@ -81,6 +84,28 @@ class DrillPadScene extends Phaser.Scene {
 
     giveLinkCommands(this, this.flight);   // commands/fast-forward from the page address
   }
+
+  // Tanks (tanks.js): enemy flights hunting your flanks on the pad
+  startTanks(def) {
+    this.enemyViews = new Map();
+    this.tanks = new TanksGame(def.tanks, this.flight, {
+      arena: this.pad,
+      onSpawn: e => this.enemyViews.set(e, new FlightView(this, e.flight, null, { guidonColor: e.color, label: e.name })),
+      onRemove: e => {                              // eliminated: fade out
+        const v = this.enemyViews.get(e);
+        this.enemyViews.delete(e);
+        if (v) this.time.delayedCall(700, () => v.destroy());
+      },
+      onEvent: ev => {
+        if (ev.type === 'eliminated') toast('💥 ' + ev.name + ' flanked! +1', 'good');
+        else if (ev.type === 'life-lost') toast('✘ ' + ev.reason + ' (' + ev.lives + ' ' + (ev.lives === 1 ? 'life' : 'lives') + ' left)', 'bad');
+        else if (ev.type === 'wave' && ev.wave > 1) toast('Wave ' + ev.wave + ': faster enemies', '');
+      },
+    });
+    this.run.extra = () => this.tanks.results();
+  }
+
+  stepOthers(dt) { if (this.tanks) this.tanks.update(dt); }
 
   // Move / turn the flight during the planning period (it is re-formed at the new spot)
   placeFlight(x, y, dir) {
@@ -147,6 +172,11 @@ class DrillPadScene extends Phaser.Scene {
     this.flightView.sync(dt);
     this.metronome.update(dt);
     this.camera.update(dt);
+    if (this.tanks) {
+      this.tanks.update(dt);
+      this.enemyViews.forEach(v => v.sync(dt));
+      if (this.tanks.status !== 'playing' && this.run.running) this.run.end(this.tanks.status);
+    }
     this.run.update(dt);
     updateRunHud();
   }

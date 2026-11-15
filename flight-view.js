@@ -104,6 +104,13 @@ class FlightView {
     });
   }
 
+  // Remove the pictures (e.g. an eliminated flight in Tanks)
+  destroy() {
+    this.sprites.forEach(sp => { sp.box.destroy(); sp.shadow.destroy(); });
+    this.sprites.clear();
+    if (this.label) this.label.destroy();
+  }
+
   rebuild() {
     this.sprites.forEach(s => { s.box.destroy(); s.shadow.destroy(); });
     this.sprites.clear();
