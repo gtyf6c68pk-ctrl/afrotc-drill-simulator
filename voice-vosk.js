@@ -166,7 +166,8 @@ const voskEngine = {
       if (saidAt !== null && activeFlight) {
         const prepAt = prepMs(pos, pos + e.count);
         activeFlight.judgeTiming(e.handle, (e.givenAt - saidAt) / 1000, prepAt !== null ? (e.givenAt - prepAt) / 1000 : null);
-        note = ' (HARCH/HALT started ' + ((e.givenAt - saidAt) / 1000).toFixed(2) + ' s before the flight reacted)';
+        // How long recognition took (NOT the timing grade: commands are graded from when the word was said)
+        note = ' (recognized ' + ((e.givenAt - saidAt) / 1000).toFixed(2) + ' s after you said it; timed from when you said it)';
       }
       pos += e.count;
     });
