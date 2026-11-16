@@ -1004,6 +1004,7 @@ class FlightLogic {
     const g = this.guide, f = DIRS[this.mainDir()];
     let best = null, bd = Infinity;
     this.intersections.forEach(ix => {
+      if (ix.roadGuards === false) return;          // no road guards used here (user)
       const d = Math.hypot(g.x - ix.x, g.y - ix.y);
       const ahead = (ix.x - g.x) * f.x + (ix.y - g.y) * f.y > -ix.r;
       if (ahead && d < ix.r + DRILL.roadGuards.approachPx && d < bd) { bd = d; best = ix; }
@@ -1471,7 +1472,7 @@ class FlightLogic {
       const rg = this.roadGuards;
       if (event === 'crossing' && rg && rg.ix === ix) rg.crossed = true;
       if (event === 'cleared' && rg && rg.ix === ix) { rg.cleared = true; this.feedback('The flight has passed ' + ix.name + '. Command Road Guards, IN.', 'info'); }
-      if (event === 'crossing' && this.marchers().length > DRILL.roadGuards.requiredAbove &&
+      if (event === 'crossing' && ix.roadGuards !== false && this.marchers().length > DRILL.roadGuards.requiredAbove &&
           !(rg && rg.ix === ix && rg.guards.every(g => g.atPost))) {
         this.log('no-road-guards', { name: ix.name });
         this.feedback('⚠ The flight crossed ' + ix.name + ' without road guards posted. Halt before the intersection and command Road Guards, OUT.', 'warn');

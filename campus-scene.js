@@ -396,7 +396,8 @@ class CampusScene extends Phaser.Scene {
       .concat(CAMPUS_FEATURES.stairs.map(st => ({ name: st.name, line: st.line.flat().map(v => v * M), w: st.width * M, treads: st.treads })));
     this.stairs.forEach(st => { st.box = lineBox(st.line, st.w / 2); });
     // Intersections (road guards, later)
-    this.intersections = CAMPUS_FEATURES.intersections.map(i => ({ name: i.name, x: i.x * M, y: i.y * M, r: i.radius * M }));
+    this.intersections = CAMPUS_FEATURES.intersections.map(i => ({ name: i.name, x: i.x * M, y: i.y * M, r: i.radius * M,
+                                                                  roadGuards: i.roadGuards !== false }));
   }
 
   // Name of the building (or tree, bike rack, fence, wall) at (x, y), or null

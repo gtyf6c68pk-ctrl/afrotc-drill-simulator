@@ -397,7 +397,7 @@ class NpcCommander {
     const g = f.guide, u = DIRS[f.mainDir()];
     this.rgDone = this.rgDone || new Set();
     for (const ix of f.intersections) {
-      if (this.rgDone.has(ix.name)) continue;
+      if (this.rgDone.has(ix.name) || ix.roadGuards === false) continue;
       const along = (ix.x - g.x) * u.x + (ix.y - g.y) * u.y, side = Math.abs((ix.x - g.x) * u.y - (ix.y - g.y) * u.x);
       if (side < ix.r + 60 && along > 0 && along - ix.r < 9 * STEP_PX) {
         if (f.columnMovementInProgress() || f.halfStep || f.markTime) return false;

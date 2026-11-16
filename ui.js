@@ -366,7 +366,7 @@ function showBriefing(def, difficulty) {
   let h = '<h2>' + esc(def.title) + '</h2><p class="sub">Live mission · ' + esc(difficulty.label) + ' · true-scale Auburn campus</p>';
   h += '<h3>Briefing</h3><ul class="tips">' + def.briefing.map(t => '<li>' + esc(t) + '</li>').join('') + '</ul>';
   h += '<h3>Objectives</h3><ol class="tips">' + def.objectives.map(o => '<li>' + esc(o.label) + '</li>').join('') + '</ol>';
-  h += '<h3>Remember</h3><ul class="tips"><li>Road guards (more than 8 in the flight): halt before the intersection, <code>Road Guards, OUT</code>, march through, <code>Road Guards, IN</code>.</li>' +
+  h += '<h3>Remember</h3><ul class="tips">' + (def.usesRoadGuards ? '<li>Road guards (more than 8 in the flight): halt before the intersection, <code>Road Guards, OUT</code>, march through, <code>Road Guards, IN</code>.</li>' : '') +
        '<li>Stairs: <code>Route Step, HARCH</code> first, <code>Flight, Ten-HUT</code> after.</li>' +
        '<li>Officers: type or say <code>SALUTE</code> and the greeting, e.g. <code>Good morning, sir</code>. POC: rank and name.' +
        (COURTESY.confirmed ? '' : ' <span class="na">(greeting wording is a placeholder until your detachment confirms it)</span>') + '</li>' +

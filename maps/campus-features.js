@@ -26,7 +26,9 @@ const CAMPUS_FEATURES = {
   // Intersections where road guards will post (procedure to be added later).
   // radius = how big the intersection area is (meters).
   intersections: [
-    { name: 'S Donahue Dr & War Eagle Way', x: 457, y: 165, radius: 14,
+    // roadGuards: false = no road guard procedure here (user, 2026-11-15: road guards are only used on the
+    // long concourse through the Village)
+    { name: 'S Donahue Dr & War Eagle Way', x: 457, y: 165, radius: 14, roadGuards: false,
       source: 'map data: traffic lights + 4 marked crosswalks; on the route Lowder -> drill field' },
     { name: 'Village plaza (Village View Dining)', x: 268.9, y: 252.7, radius: 6,
       source: 'user note "Road Intersection", snapped to the 4-way path junction' },

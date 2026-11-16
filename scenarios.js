@@ -102,11 +102,11 @@ const SCENARIOS = {
   // courtesy, drill). Checkpoints are reached in order (the flight's center within r meters).
   liveLowder: {
     id: 'liveLowder', title: 'Lowder to the drill field', mode: 'Live', map: 'Campus', hints: false, endWhenComplete: true,
-    blurb: 'March your flight from the Lowder Business Building to the Max Adams Morris Drill Field, with road guards at War Eagle Way.',
+    blurb: 'March your flight from the Lowder Business Building to the Max Adams Morris Drill Field.',
     briefing: [
       'Your flight is formed on the grass between Lowder and Horton-Hargrave, facing south.',
       'Route: south between the two buildings, west along the north sidewalk of the parking lot, then south down the east side of S Donahue Dr.',
-      'Halt before the S Donahue Dr & War Eagle Way intersection and post road guards (Road Guards, OUT). March through, then Road Guards, IN.',
+      'Cross War Eagle Way at the S Donahue Dr intersection (no road guards here: they are only used on the concourse through the Village).',
       'Finish on the Max Adams Morris Drill Field. Greet and salute the people you pass. Take stairs at route step.',
     ],
     start: { x: 526, y: 40, dir: 4 },
@@ -115,7 +115,7 @@ const SCENARIOS = {
       { type: 'checkpoint', id: 'between', label: 'Between Horton-Hargrave and Lowder', x: 526, y: 80, r: 12 },
       { type: 'checkpoint', id: 'lot', label: 'North sidewalk of the parking lot', x: 490, y: 95, r: 12 },
       { type: 'checkpoint', id: 'donahue', label: 'East sidewalk of S Donahue Dr', x: 464.5, y: 130, r: 12 },
-      { type: 'checkpoint', id: 'warEagle', label: 'Across War Eagle Way (road guards)', x: 464.5, y: 185, r: 12 },
+      { type: 'checkpoint', id: 'warEagle', label: 'Across War Eagle Way', x: 464.5, y: 185, r: 12 },
       { type: 'checkpoint', id: 'field', label: 'Max Adams Morris Drill Field', x: 420, y: 225, r: 16 },
     ],
   },
@@ -138,7 +138,7 @@ const SCENARIOS = {
     ].map(([id, label, keys]) => ({ type: 'movement', id, label, keys })),
   },
   liveVillage: {
-    id: 'liveVillage', title: 'Village loop', mode: 'Live', map: 'Campus', hints: false, endWhenComplete: true,
+    id: 'liveVillage', title: 'Village loop', mode: 'Live', map: 'Campus', hints: false, endWhenComplete: true, usesRoadGuards: true,
     blurb: 'West along Thach Concourse through the plaza (road guards), around a Village block and back.',
     briefing: [
       'Your flight is formed at the east end of Thach Concourse, facing west, next to the drill field.',
