@@ -380,9 +380,9 @@ function showFeedbackScreen() {
   feedbackReturn = $('hud').classList.contains('hidden') ? 'menu' : 'play';
   if (!$('fbType').options.length) FEEDBACK.types.forEach(t => { const o = document.createElement('option'); o.textContent = t; $('fbType').appendChild(o); });
   $('fbPreview').textContent = feedbackDetails();
-  $('fbStatus').textContent = FEEDBACK.prefillLink ? '' :
+  $('fbStatus').textContent = FEEDBACK.formUrl ? '' :
     'The feedback form isn\'t connected yet: use "Copy report" and send it to your detachment for now.';
-  $('fbSend').classList.toggle('hidden', !FEEDBACK.prefillLink);
+  $('fbSend').classList.toggle('hidden', !FEEDBACK.formUrl);
   showScreen('feedback');
   setTimeout(() => $('fbText').focus(), 0);
 }
@@ -391,10 +391,14 @@ function feedbackReport() {
   return { type: $('fbType').value, text: $('fbText').value.trim(), details: $('fbDetails').checked ? $('fbPreview').textContent : '(not included)' };
 }
 
-// The Google Form's pre-filled link with TYPE / TEXT / DETAILS replaced by the report
+// The Google Form, pre-filled: bugs into "Report Issue/Bug", the rest into "Feedback", details on one line
 function feedbackFormUrl(r) {
-  return FEEDBACK.prefillLink.replace('=TYPE', '=' + encodeURIComponent(r.type)).replace('=TEXT', '=' + encodeURIComponent(r.text))
-    .replace('=DETAILS', '=' + encodeURIComponent(r.details));
+  const E = FEEDBACK.entries, isBug = FEEDBACK.bugTypes.includes(r.type);
+  const details = FEEDBACK.detailsOneLine ? r.details.replace(/\s*\n\s*/g, ' | ') : r.details;
+  const q = new URLSearchParams({ usp: 'pp_url' });
+  q.set(isBug ? E.bug : E.feedback, '[' + r.type + '] ' + r.text);
+  q.set(E.details, details);
+  return FEEDBACK.formUrl + '?' + q.toString();
 }
 
 function wireFeedback() {
