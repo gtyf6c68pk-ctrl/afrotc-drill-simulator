@@ -95,6 +95,11 @@ const DRILL = {
     [/\bhalfleft\b/g, 'half left'],
     [/\bninety\b/g, '90'],
     [/\b(forty five|fortyfive)\b/g, '45'],
+    [/\b(seventy five|seventyfive)\b/g, '75'],
+    [/\bsixty\b/g, '60'],
+    [/\bthirty\b/g, '30'],
+    [/\bfifteen\b/g, '15'],
+    [/\b(15|30|45|60|75|90) ?(deg|degree|°)\b/g, '$1 degrees'],
     [/\bdegree\b/g, 'degrees'],
     [/\b(90|45)degrees\b/g, '$1 degrees'],
   ],
@@ -232,3 +237,21 @@ const DRILL = {
       action: 'cover', note: 'straightens the flight out; required after every halt', ref: '4.4.2' },
   ],
 };
+
+// ---------- Inclines in 15-degree steps (user, 2026-11-16) ----------
+// "Incline 15 degrees TO THE RIGHT" ... 90, both directions, plus the guide forms ("Guide, incline
+// 30 degrees to the Left"). Allowed at attention and at route step / at ease (DAFPAM 3.19, 4.12.4:
+// the guide inclines and the flight follows; no pivot, no half step afterwards).
+[15, 30, 45, 60, 75, 90].forEach(deg => {
+  ['Right', 'Left'].forEach(side => {
+    const turn = (side === 'Right' ? 1 : -1) * deg / 90;
+    const add = (key, say) => {
+      if (DRILL.commands.some(c => c.key === key)) return;
+      DRILL.commands.push({ key, say, label: say, foot: null, when: 'marching', action: 'incline', turn,
+                            routeStepOk: true, doubleTimeOk: true, note: deg + ' degrees, no pivot', ref: '3.19, 4.12.4' });
+    };
+    add('incline ' + deg + ' degrees to the ' + side.toLowerCase(), 'Incline ' + deg + ' degrees TO THE ' + side.toUpperCase());
+    add('guide incline ' + deg + ' degrees to the ' + side.toLowerCase(), 'Guide, incline ' + deg + ' degrees to the ' + side);
+  });
+});
+

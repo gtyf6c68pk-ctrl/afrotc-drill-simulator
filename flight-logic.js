@@ -125,15 +125,33 @@ const DIRS = [
   { x: -1,   y: 0,    name: 'West' },
   { x: -D45, y: -D45, name: 'Northwest' },
 ];
-// Turn a direction by `quarterTurns` (+ right, - left; 0.5 = 45 degrees)
-function turnDir(dir, quarterTurns) { return ((dir + Math.round(quarterTurns * 2)) % 8 + 8) % 8; }
+// Directions are numbered in 45-degree units (0 = North, 2 = East, 4 = South, 6 = West) and may also
+// be a third in between (every 15 degrees: 1/3 = North 15 degrees East), for the 15/30/60/75-degree
+// inclines (user, 2026-11-16). A direction is always k/3 for a whole number k (0..23).
+// Turn a direction by `quarterTurns` (+ right, - left; 0.5 = 45 degrees, 1/6 = 15 degrees)
+function turnDir(dir, quarterTurns) {
+  const k = Math.round(dir * 3) + Math.round(quarterTurns * 6);
+  return (((k % 24) + 24) % 24) / 3;
+}
+// The unit vector (x, y) and a name for any direction (whole or in-between)
+const DIR_CACHE = {};
+function dirVec(d) {
+  if (Number.isInteger(d) && DIRS[d]) return DIRS[d];
+  const k = (((Math.round(d * 3)) % 24) + 24) % 24;
+  if (k % 3 === 0) return DIRS[k / 3];
+  if (!DIR_CACHE[k]) {
+    const a = k * Math.PI / 12, deg = k * 15;
+    DIR_CACHE[k] = { x: Math.sin(a), y: -Math.cos(a), name: 'bearing ' + String(deg).padStart(3, '0') + '°' };
+  }
+  return DIR_CACHE[k];
+}
 
 // ---------- Geometry helpers ----------
 // "a" = how far forward a spot is, "b" = how far to the right, for a given facing.
-function aOf(p, h) { return p.x * DIRS[h].x + p.y * DIRS[h].y; }
-function bOf(p, h) { const r = DIRS[turnDir(h, 1)]; return p.x * r.x + p.y * r.y; }
+function aOf(p, h) { return p.x * dirVec(h).x + p.y * dirVec(h).y; }
+function bOf(p, h) { const r = dirVec(turnDir(h, 1)); return p.x * r.x + p.y * r.y; }
 function toXY(a, b, h) {
-  const f = DIRS[h], r = DIRS[turnDir(h, 1)];
+  const f = dirVec(h), r = dirVec(turnDir(h, 1));
   return { x: a * f.x + b * r.x, y: a * f.y + b * r.y };
 }
 
@@ -164,7 +182,7 @@ function walkToward(p, spot, maxDist) {
 // March a person forward, turning at any pivot points on their path.
 function moveAlongPath(p, distance) {
   while (distance > 0) {
-    const d = DIRS[p.dir];
+    const d = dirVec(p.dir);
     const turn = p.turns[0];
     if (turn) {
       const toTurn = (turn.x - p.x) * d.x + (turn.y - p.y) * d.y;
@@ -332,9 +350,11 @@ class FlightLogic {
   // ---------- Reading the formation ----------
   // The direction most of the flight is facing
   mainDir() {
-    const counts = [0, 0, 0, 0, 0, 0, 0, 0];
-    this.members().forEach(p => { if (!p.roadGuard) counts[p.dir]++; });   // road guards face the traffic
-    return counts.indexOf(Math.max(...counts));
+    const counts = new Map();
+    this.members().forEach(p => { if (!p.roadGuard) counts.set(p.dir, (counts.get(p.dir) || 0) + 1); });   // road guards face the traffic
+    let best = 0, n = -1;
+    counts.forEach((c, d) => { if (c > n) { n = c; best = d; } });
+    return best;
   }
 
   // Column, inverted column, line, or inverted line, based on where the element leaders are
@@ -899,7 +919,7 @@ class FlightLogic {
         const mid = turnDir(h, quarterTurns / 2);
         const p1 = toXY(baseFront, fileB[k], h); p1.dir = mid;
         const diag = sideways * Math.SQRT2;                     // lands exactly one interval per file out
-        const p2 = { x: p1.x + DIRS[mid].x * diag, y: p1.y + DIRS[mid].y * diag, dir: newDir };
+        const p2 = { x: p1.x + dirVec(mid).x * diag, y: p1.y + dirVec(mid).y * diag, dir: newDir };
         const toPivot = aOf(p1, h) - aOf(f[0], h);
         turns = [p1, p2];
         along = aOf(p2, newDir) - toPivot - diag;               // where this file ends up along the new direction
@@ -943,7 +963,7 @@ class FlightLogic {
     fileB.forEach((b, k) => { if (Math.abs(b - bOf(this.guide, h)) < Math.abs(fileB[guideFile] - bOf(this.guide, h))) guideFile = k; });
     files[guideFile].push(this.guide);
     const change = INTERVAL_PX - CLOSE_INTERVAL_PX;            // per file
-    const toward = DIRS[turnDir(h, close ? 1 : -1)];           // close: to the right; extend: to the left
+    const toward = dirVec(turnDir(h, close ? 1 : -1));           // close: to the right; extend: to the left
 
     if (!this.marching) {
       // Side steps at the halt: file k (counting from the right) moves k x change
@@ -984,7 +1004,7 @@ class FlightLogic {
   cmdSideStep(cmd) {
     if (this.marching) return cmd.label + ' is given only from the halt.';
     if (this.columnMovementInProgress()) return 'Wait until the whole flight has finished the current movement.';
-    const d = DIRS[turnDir(this.mainDir(), cmd.turn)];
+    const d = dirVec(turnDir(this.mainDir(), cmd.turn));
     this.startMarching();
     this.sideStep = { x: d.x, y: d.y };
     return 'OK:' + cmd.say + ' (until Flight, HALT)';
@@ -1003,7 +1023,7 @@ class FlightLogic {
     const shift = this.opts.sidewalkEdge(this.guide.x, this.guide.y, h);   // + = to the right
     if (shift === null) return 'The guide is not on a sidewalk running this way. March onto the sidewalk first.';
     if (Math.abs(shift) < 3) return 'The guide is already along the right edge of the sidewalk.';
-    const d = DIRS[turnDir(h, shift > 0 ? 1 : -1)];
+    const d = dirVec(turnDir(h, shift > 0 ? 1 : -1));
     this.marchers().forEach(p => this.slides.push({ p, ux: d.x, uy: d.y, remaining: Math.abs(shift) }));
     return 'OK:' + cmd.say + ' (sliding ' + (shift > 0 ? 'right' : 'left') + ' to the edge of the sidewalk)';
   }
@@ -1046,7 +1066,7 @@ class FlightLogic {
   // ---------- Road guards (detachment SOP; see DRILL.roadGuards) ----------
   // The intersection the halted flight is in front of (guide within the approach distance), or null
   intersectionAhead() {
-    const g = this.guide, f = DIRS[this.mainDir()];
+    const g = this.guide, f = dirVec(this.mainDir());
     let best = null, bd = Infinity;
     this.intersections.forEach(ix => {
       if (ix.roadGuards === false) return;          // no road guards used here (user)
@@ -1069,7 +1089,7 @@ class FlightLogic {
     const files = [0, els.length - 1, Math.floor(els.length / 2)].slice(0, count);
     const guards = files.map(e => els[e][els[e].length - 1]);
     // Where: each side of the crossing (perpendicular to the flight's march), a third one on the far side
-    const h = this.mainDir(), u = DIRS[h], r = DIRS[turnDir(h, 1)], reach = Math.max(ix.r - R.postPastEdgePx, ix.r * 0.6);
+    const h = this.mainDir(), u = dirVec(h), r = dirVec(turnDir(h, 1)), reach = Math.max(ix.r - R.postPastEdgePx, ix.r * 0.6);
     const posts = [
       { x: ix.x - r.x * reach, y: ix.y - r.y * reach, dir: turnDir(h, -1) },   // left side, facing that traffic
       { x: ix.x + r.x * reach, y: ix.y + r.y * reach, dir: turnDir(h, 1) },    // right side
@@ -1104,7 +1124,7 @@ class FlightLogic {
       }
       // back to the place behind the person ahead of them in their file
       const el = this.elements.find(e => e.includes(g)), i = el.indexOf(g), ahead = el[i - 1];
-      const spot = { x: ahead.x - DIRS[ahead.dir].x * DISTANCE_PX, y: ahead.y - DIRS[ahead.dir].y * DISTANCE_PX };
+      const spot = { x: ahead.x - dirVec(ahead.dir).x * DISTANCE_PX, y: ahead.y - dirVec(ahead.dir).y * DISTANCE_PX };
       if (walkToward(g, spot, run + (this.marching ? STEP_PX * dt / this.stepSeconds : 0))) {
         g.roadGuard = null; g.dir = ahead.dir; g.turns = []; g.group = null;
       }
@@ -1423,7 +1443,7 @@ class FlightLogic {
       } else if (this.opts.obstacleAt) {
         // Look half a step ahead of each person for a building
         for (const p of this.inRanks()) {
-          const d = DIRS[p.dir];
+          const d = dirVec(p.dir);
           const hit = this.opts.obstacleAt(p.x + d.x * STEP_PX / 2, p.y + d.y * STEP_PX / 2);
           if (hit) {
             this.stop();
@@ -1513,7 +1533,7 @@ class FlightLogic {
   //   crossing:    anyone in the flight is inside the intersection
   //   cleared:     the whole flight is out of it again
   trackIntersections() {
-    const f = DIRS[this.mainDir()], g = this.guide;
+    const f = dirVec(this.mainDir()), g = this.guide;
     this.intersections.forEach(ix => {
       const crossing = this.inRanks().some(p => Math.hypot(p.x - ix.x, p.y - ix.y) < ix.r);
       const ahead = (ix.x - g.x) * f.x + (ix.y - g.y) * f.y > 0;
@@ -1548,7 +1568,7 @@ class FlightLogic {
     const alignment = this.covering ? 'covering...' : drift < 2 ? 'sharp' : drift < 6 ? 'slightly ragged' : 'ragged';
     const ix = this.intersections.find(i => i.state === 'crossing') || this.intersections.find(i => i.state === 'approaching');
     const at = ix ? ' — ' + (ix.state === 'crossing' ? 'crossing ' : 'approaching ') + ix.name : '';
-    return moving + ' — ' + what + ', facing ' + DIRS[this.mainDir()].name + ' — alignment: ' + alignment + at;
+    return moving + ' — ' + what + ', facing ' + dirVec(this.mainDir()).name + ' — alignment: ' + alignment + at;
   }
 
   reportStatus() { if (this.opts.onStatus) this.opts.onStatus(this.statusText()); }

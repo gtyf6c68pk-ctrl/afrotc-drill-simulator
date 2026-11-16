@@ -74,7 +74,7 @@ class TanksGame {
   // ---------- Geometry ----------
   // A flight's frame: facing h, right r, the extent of its formation, and which people are in front
   frame(f) {
-    const d = f.mainDir(), h = DIRS[d], r = DIRS[turnDir(d, 1)];
+    const d = f.mainDir(), h = dirVec(d), r = dirVec(turnDir(d, 1));
     const ps = f.marchers();
     const al = ps.map(p => p.x * h.x + p.y * h.y), la = ps.map(p => p.x * r.x + p.y * r.y);
     return { h, r, ps, front: Math.max(...al), rear: Math.min(...al), left: Math.min(...la), right: Math.max(...la) };

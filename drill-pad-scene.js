@@ -73,7 +73,7 @@ class DrillPadScene extends Phaser.Scene {
         const w = this.cameras.main.getWorldPoint(p.x, p.y);
         this.placeFlight(w.x, w.y, this.flight.opts.startDir || 0);
       });
-      setPlanningControls(() => { if (planning()) this.placeFlight(null, null, ((this.flight.opts.startDir || 0) + 2) % 8); });
+      setPlanningControls(() => { if (planning()) this.placeFlight(null, null, turnDir(this.flight.opts.startDir || 0, 1)); });
     }
     this.metronome = new FootMetronome(this.flight, settings.cadence);
 

@@ -25,7 +25,8 @@ const VOSK_HOLD_SECONDS = 4;   // how long a preparatory command waits for its c
 function voskGrammar() {
   const spoken = key => key.replace(/\bharch\b/g, 'march').replace(/\bhace\b/g, 'face')
     .replace(/\bharms\b/g, 'arms').replace(/\bhest\b/g, 'rest')
-    .replace(/\b45\b/g, 'forty five').replace(/\b90\b/g, 'ninety');
+    .replace(/\b45\b/g, 'forty five').replace(/\b90\b/g, 'ninety').replace(/\b15\b/g, 'fifteen')
+      .replace(/\b30\b/g, 'thirty').replace(/\b60\b/g, 'sixty').replace(/\b75\b/g, 'seventy five');
   const phrases = new Set();
   DRILL.commands.forEach(c => {
     const whole = spoken(c.key);

@@ -401,7 +401,7 @@ class CampusScene extends Phaser.Scene {
   // it is just inside the RIGHT edge of the sidewalk it is on, marching in direction h.
   // null if it isn't on a sidewalk that runs (roughly) the way the flight is marching.
   sidewalkEdge(x, y, h) {
-    const f = DIRS[h], r = DIRS[turnDir(h, 1)];
+    const f = dirVec(h), r = dirVec(turnDir(h, 1));
     let best = null;
     CAMPUS.roads.forEach(road => {
       if (!isPath(road)) return;

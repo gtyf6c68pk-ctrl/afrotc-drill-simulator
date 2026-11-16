@@ -247,7 +247,7 @@ function calibrateTurns(elements, elementSize) {
     if (f.halfStep) { strike('left'); f.giveCommand('Forward, HARCH'); }
     const until = f.realSteps() + 8;
     while (f.realSteps() < until) step();
-    const c1 = flightCenter(f), nd = turnDir(0, NPC_TURNS[text] / 2), r = DIRS[turnDir(nd, 1)];
+    const c1 = flightCenter(f), nd = turnDir(0, NPC_TURNS[text] / 2), r = dirVec(turnDir(nd, 1));
     table[text] = (c1.x - c0.x) * r.x + (c1.y - c0.y) * r.y;
   });
   NPC_CALIBRATION[id] = table;
@@ -350,11 +350,11 @@ class NpcCommander {
     this.goal = goal;
     if (!this.legs.length || this.backOff || this.turnAround) return;
     if (this.legs[0].aim) {                       // back from an attack run: rejoin the nearest lane ahead
-      const f = this.flight, c = flightCenter(f), h = f.mainDir(), u = DIRS[h];
+      const f = this.flight, c = flightCenter(f), h = f.mainDir(), u = dirVec(h);
       const ahead = this.net.live.filter(n => (n.x - c.x) * u.x + (n.y - c.y) * u.y > 300)
         .sort((a, b) => Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y))[0];
       if (!ahead) return;
-      const d = dirOf(ahead.x - c.x, ahead.y - c.y), v = DIRS[d];
+      const d = dirOf(ahead.x - c.x, ahead.y - c.y), v = dirVec(d);
       this.legs = [{ dir: d, x1: ahead.x - v.x * 2000, y1: ahead.y - v.y * 2000, x2: ahead.x, y2: ahead.y, endNode: ahead.id, edge: null, edges: [], w: 0 }];
       this.extendRoute();
       return;
@@ -394,7 +394,7 @@ class NpcCommander {
       return false;
     }
     // Approaching an intersection we haven't guarded yet: halt a few meters before it
-    const g = f.guide, u = DIRS[f.mainDir()];
+    const g = f.guide, u = dirVec(f.mainDir());
     this.rgDone = this.rgDone || new Set();
     for (const ix of f.intersections) {
       if (this.rgDone.has(ix.name) || ix.roadGuards === false) continue;
@@ -412,7 +412,7 @@ class NpcCommander {
   // (column movements / inclines line the flight up on it). The route network is left behind.
   aim(point) {
     const c = flightCenter(this.flight);
-    const d = dirOf(point.x - c.x, point.y - c.y), u = DIRS[d];
+    const d = dirOf(point.x - c.x, point.y - c.y), u = dirVec(d);
     this.goal = point;
     if (this.backOff || this.turnAround || this.flight.columnMovementInProgress()) return;
     this.legs = [{ dir: d, x1: point.x - u.x * 2000, y1: point.y - u.y * 2000, x2: point.x + u.x * 2000, y2: point.y + u.y * 2000,
@@ -456,7 +456,7 @@ class NpcCommander {
   // Others' people in front of this flight (it would walk into them): returns the blocking flight or null.
   // `dir` = look along another facing (the sidewalk after the next corner) instead of the current one.
   blocker(dir) {
-    const f = this.flight, d = dir === undefined ? f.mainDir() : dir, h = DIRS[d], r = DIRS[turnDir(d, 1)];
+    const f = this.flight, d = dir === undefined ? f.mainDir() : dir, h = dirVec(d), r = dirVec(turnDir(d, 1));
     const mine = f.everyone();
     const front = Math.max(...mine.map(p => p.x * h.x + p.y * h.y));
     const lats = mine.map(p => p.x * r.x + p.y * r.y);
@@ -464,7 +464,7 @@ class NpcCommander {
     for (const other of this.opts.others()) {
       if (other === f || (this.opts.ignore && this.opts.ignore(other))) continue;
       // where they are now, and where a marching flight will be ~3 steps from now (cross traffic)
-      const v = other.marching && !other.markTime ? DIRS[other.mainDir()] : null;
+      const v = other.marching && !other.markTime ? dirVec(other.mainDir()) : null;
       for (const q of other.everyone()) {
         for (const ahead of v ? [0, 120] : [0]) {
           const qx = q.x + (v ? v.x * ahead : 0), qy = q.y + (v ? v.y * ahead : 0);
@@ -479,7 +479,7 @@ class NpcCommander {
   // Room for a Counter March right here: the flight's own footprint plus ~6 m ahead (the elements loop
   // forward) and ~2 m to each side must be free of buildings/obstacles and other flights
   counterMarchRoom() {
-    const f = this.flight, d = f.mainDir(), h = DIRS[d], r = DIRS[turnDir(d, 1)];
+    const f = this.flight, d = f.mainDir(), h = dirVec(d), r = dirVec(turnDir(d, 1));
     const ps = f.everyone();
     const al = ps.map(p => p.x * h.x + p.y * h.y), la = ps.map(p => p.x * r.x + p.y * r.y);
     const a0 = Math.min(...al) - 30, a1 = Math.max(...al) + 190, b0 = Math.min(...la) - 60, b1 = Math.max(...la) + 60;
@@ -554,7 +554,7 @@ class NpcCommander {
       if (this.waitTime > 30 && this.yields(block)) { this.backOff = { stage: 'start' }; this.turnAround = false; return; }
       if (!f.markTime && !f.columnMovementInProgress()) this.tryGive('Mark Time, HARCH', strike);
       // Give way by turning around, unless that would face another flight close behind
-      if (this.waitTime > 6 && f.markTime && this.yields(block) && !this.blocker((f.mainDir() + 4) % 8) &&
+      if (this.waitTime > 6 && f.markTime && this.yields(block) && !this.blocker(turnDir(f.mainDir(), 2)) &&
           this.counterMarchRoom()) this.turnAround = true;
       return;
     }
@@ -575,7 +575,7 @@ class NpcCommander {
     if (f.pending || f.haltAt !== null || f.columnMovementInProgress()) return;
     if (!f.marching && f.needCover) { this.tryGive('COVER'); return; }
     const L = this.legs[0];
-    const toEnd = L ? (L.x2 - c.x) * DIRS[f.mainDir()].x + (L.y2 - c.y) * DIRS[f.mainDir()].y : 0;
+    const toEnd = L ? (L.x2 - c.x) * dirVec(f.mainDir()).x + (L.y2 - c.y) * dirVec(f.mainDir()).y : 0;
     const clear = this.clearOfOthers(c, 330);
     if (b.stage === 'start') {
       if (f.markTime || f.halfStep) { this.tryGive('Forward, HARCH', strike); return; }
@@ -609,7 +609,7 @@ class NpcCommander {
     const leg = this.legs[0];
     if (!leg) return;
     const startNode = this.net.nodes.find(n => Math.hypot(n.x - leg.x1, n.y - leg.y1) < 1);
-    this.legs = [{ dir: (leg.dir + 4) % 8, x1: leg.x2, y1: leg.y2, x2: leg.x1, y2: leg.y1,
+    this.legs = [{ dir: turnDir(leg.dir, 2), x1: leg.x2, y1: leg.y2, x2: leg.x1, y2: leg.y1,
                    endNode: startNode ? startNode.id : leg.endNode, edge: leg.edge, edges: leg.edges || [], w: leg.w, aim: leg.aim }];
     if (legOnly) return;
     this.stats.reroutes++;
@@ -620,7 +620,7 @@ class NpcCommander {
   // `dir` (+ = right). On a wide walkway (the Village concourse) flights keep to the RIGHT half, so two
   // flights going opposite ways pass each other.
   lateral(c, L, dir) {
-    const r = DIRS[turnDir(dir, 1)];
+    const r = dirVec(turnDir(dir, 1));
     return (c.x - L.x1) * r.x + (c.y - L.y1) * r.y - this.keepRight(L);
   }
   keepRight(L) { return L.w >= 260 ? L.w / 4 : 0; }
@@ -628,7 +628,7 @@ class NpcCommander {
   // Should a turn to facing `newDir` onto leg L be given at this heel strike? (now is closer to the
   // ideal moment than two steps later)
   timeToTurn(c, text, newDir, L) {
-    const f = this.flight, h = DIRS[f.mainDir()], r = DIRS[turnDir(newDir, 1)];
+    const f = this.flight, h = dirVec(f.mainDir()), r = dirVec(turnDir(newDir, 1));
     const off = (L.x1 - c.x) * r.x + (L.y1 - c.y) * r.y + this.keepRight(L);   // target line, across the new facing
     const lat = this.turns[text];
     const perStep = (f.halfStep ? STEP_PX / 2 : STEP_PX) * (h.x * r.x + h.y * r.y);
@@ -664,7 +664,7 @@ class NpcCommander {
       const delta = dirDelta(h, N.dir);
       const text = this.turnCommand(delta, false);
       if (text) {
-        const r = DIRS[turnDir(N.dir, 1)], off = (N.x1 - c.x) * r.x + (N.y1 - c.y) * r.y;
+        const r = dirVec(turnDir(N.dir, 1)), off = (N.x1 - c.x) * r.x + (N.y1 - c.y) * r.y;
         this.nearCorner = Math.abs(off - this.turns[text]) < 12 * STEP_PX;   // wait well short of a busy junction
       }
       if (text && strike && this.timeToTurn(c, text, N.dir, N)) {
@@ -675,7 +675,7 @@ class NpcCommander {
     }
     // 3. Stay centered on the sidewalk: incline toward the line when more than ~0.8 m off
     const e = this.lateral(c, L, h);
-    const toEnd = (L.x2 - c.x) * DIRS[h].x + (L.y2 - c.y) * DIRS[h].y;
+    const toEnd = (L.x2 - c.x) * dirVec(h).x + (L.y2 - c.y) * dirVec(h).y;
     if (Math.abs(e) > 26 && toEnd > 260 && strike) {
       const text = e > 0 ? 'Incline to the Left' : 'Incline to the Right';
       if (this.tryGive(text, strike)) this.correcting = true;
