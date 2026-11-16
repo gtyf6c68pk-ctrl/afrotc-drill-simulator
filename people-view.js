@@ -60,10 +60,11 @@ class PeopleView {
     g.fillStyle(cadet ? 0x1b1b1b : 0xa59a77, 1).fillRect(-W / 2, -H / 2, W, H);                 // tab
     const mark = cadet ? 0xd9dde2 : 0x3b3326;
     g.fillStyle(mark, 1);
-    if (I.stripes) for (let i = 0; i < I.stripes; i++) g.fillRect(-9, -H / 2 + 3 + i * 4, 18, 2.4);
-    if (I.diamonds) for (let i = 0; i < I.diamonds; i++) {
-      const cx = (i - (I.diamonds - 1) / 2) * 7.5;
-      g.fillTriangle(cx - 3.2, 0, cx, -4.5, cx + 3.2, 0); g.fillTriangle(cx - 3.2, 0, cx, 4.5, cx + 3.2, 0);
+    if (I.stripes) {                                         // horizontal stripes, top to bottom, centered
+      const size = s => s === 'thin' ? 1.3 : 2.6, gap = 1.4;
+      const total = I.stripes.reduce((t, s) => t + size(s), 0) + gap * (I.stripes.length - 1);
+      let y = -total / 2;
+      I.stripes.forEach(s => { g.fillRect(-9, y, 18, size(s)); y += size(s) + gap; });
     }
     if (I.bars) for (let i = 0; i < I.bars; i++) g.fillRect(-5 + i * 6 - (I.bars - 1) * 0.5, -5, 3, 10);
     if (I.leaf) {                                            // oak leaf: a leaf shape with a stem

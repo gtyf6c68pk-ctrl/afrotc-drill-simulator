@@ -55,12 +55,17 @@ const COURTESY = {
 
   // Rank insignia drawn on the people's rank tabs (Live mode; user approved 2026-11-15).
   //  POC (AFROTC supplement to DAFI 36-2903): "metallic black and silver cadet officer rank insignia",
-  //  worn centered on the OCP chest rank tab, bars horizontal. Number of marks per grade = the standard
-  //  Air Force cadet officer pattern: 1-3 stripes (lieutenants, captain), 1-3 diamonds (field grade).
+  //  worn centered on the OCP chest rank tab, bars horizontal. The stripes per grade are from the user's
+  //  detachment (2026-11-15), listed TOP to bottom: C/2d Lt one thin; C/1st Lt thin over thick; C/Capt two
+  //  thick; C/Maj thick, thin, thick; C/Lt Col three thick; C/Col four thick.
   //  Cadre (active duty, OCP): Capt = two bars, Lt Col = oak leaf, Maj = oak leaf (gold), Col = eagle.
   insignia: {
-    'C/2d Lt': { tab: 'cadet', stripes: 1 }, 'C/1st Lt': { tab: 'cadet', stripes: 2 }, 'C/Capt': { tab: 'cadet', stripes: 3 },
-    'C/Maj': { tab: 'cadet', diamonds: 1 }, 'C/Lt Col': { tab: 'cadet', diamonds: 2 }, 'C/Col': { tab: 'cadet', diamonds: 3 },
+    'C/2d Lt':  { tab: 'cadet', stripes: ['thin'] },
+    'C/1st Lt': { tab: 'cadet', stripes: ['thin', 'thick'] },
+    'C/Capt':   { tab: 'cadet', stripes: ['thick', 'thick'] },
+    'C/Maj':    { tab: 'cadet', stripes: ['thick', 'thin', 'thick'] },
+    'C/Lt Col': { tab: 'cadet', stripes: ['thick', 'thick', 'thick'] },
+    'C/Col':    { tab: 'cadet', stripes: ['thick', 'thick', 'thick', 'thick'] },
     '2d Lt': { tab: 'ocp', bars: 1 }, '1st Lt': { tab: 'ocp', bars: 1 }, 'Capt': { tab: 'ocp', bars: 2 },
     'Maj': { tab: 'ocp', leaf: true }, 'Lt Col': { tab: 'ocp', leaf: true }, 'Col': { tab: 'ocp', eagle: true },
   },
