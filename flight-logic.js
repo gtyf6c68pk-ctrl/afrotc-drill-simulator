@@ -473,6 +473,10 @@ class FlightLogic {
 
   // Where we are in the cadence, in real steps since stepping off
   realSteps() { return this.stepCount; }
+  // The cadence position that heel strikes are counted on (includes the shift from Change Step).
+  // Timing is ALWAYS graded on this, like the metronome (bug fix 2026-11-15: voice grading used
+  // realSteps, so after a Change Step every spoken command was judged against the other heel).
+  footPosition() { const i = this.footInfo(); return i ? i.progress : this.stepCount; }
 
   // The heel strike the current command was really given on. Spoken commands are heard
   // late, so this goes back by the command's age (see giveCommand). Movements are counted
@@ -564,22 +568,26 @@ class FlightLogic {
     const bias = this.timingBias(true);                          // this computer's measured voice delay
     ageAtGive += bias;
     if (prepAgeAtGive !== undefined && prepAgeAtGive !== null) prepAgeAtGive += bias;
+    const foot0 = handle.footAtGive !== undefined ? handle.footAtGive : handle.stepAtGive;   // heel-strike clock
     const prepStartStep = prepStartAgeAtGive !== undefined && prepStartAgeAtGive !== null
-      ? handle.stepAtGive - (prepStartAgeAtGive + bias) / handle.stepSec : null;
-    const exactStep = handle.stepAtGive - ageAtGive / handle.stepSec;
+      ? foot0 - (prepStartAgeAtGive + bias) / handle.stepSec : null;
+    const exactStep = handle.stepAtGive - ageAtGive / handle.stepSec;     // for re-timing the movement
+    const exactFoot = foot0 - ageAtGive / handle.stepSec;                 // for grading the heel
     if (handle.pending && this.pending === handle.pending) {
       this.pending.at = Math.max(Math.round(exactStep) + handle.pendingOffset, this.realSteps());
     }
     if (!handle.foot) return;
-    const error = timingErrorAt(exactStep, handle.foot);
-    const problem = this.timingProblem(error, handle.foot, signedTimingAt(exactStep, handle.foot) * handle.stepSec);
-    const prepStep = prepAgeAtGive !== undefined && prepAgeAtGive !== null ? handle.stepAtGive - prepAgeAtGive / handle.stepSec : null;
+    const error = timingErrorAt(exactFoot, handle.foot);
+    const signed = signedTimingAt(exactFoot, handle.foot) * handle.stepSec;
+    const problem = this.timingProblem(error, handle.foot, signed);
+    const prepStep = prepAgeAtGive !== undefined && prepAgeAtGive !== null ? foot0 - prepAgeAtGive / handle.stepSec : null;
     const prep = prepStep !== null && this.opts.gradePrep !== false
-      ? prepTimingProblem(prepStep, exactStep, handle.foot, this.grace(), handle.stepSec, prepStartStep) : null;
+      ? prepTimingProblem(prepStep, exactFoot, handle.foot, this.grace(), handle.stepSec, prepStartStep) : null;
     this.log('timing-graded', { commandId: handle.id, name: handle.name, foot: handle.foot,
                                 timingError: Math.round(error * 100) / 100, problem: problem ? problem.text : null,
+                                timingOffsetSec: Math.round(signed * 1000) / 1000, voice: true,
                                 prepGiven: prepStep !== null, prepProblem: prep ? prep.text : null,
-                                prepGap: prepStep !== null ? Math.round((exactStep - prepStep) * 100) / 100 : null });
+                                prepGap: prepStep !== null ? Math.round((exactFoot - prepStep) * 100) / 100 : null });
     if (!problem && !prep) return;
     if (problem && handle.action !== 'cover') this.addDisorder(problem.drift);
     const texts = [problem && problem.text, prep && prep.text].filter(Boolean);
@@ -1191,7 +1199,7 @@ class FlightLogic {
     let cleaned = cleanUpCommand(text, options.voice);
     if (!cleaned) return;
     const stepSecNow = this.doubleTime ? this.doubleStepSeconds : this.stepSeconds;
-    const saidStep = age => this.marching ? this.realSteps() - (age || 0) / stepSecNow : null;
+    const saidStep = age => this.marching ? this.footPosition() - (age || 0) / stepSecNow : null;   // heel-strike clock
     // When the preparatory command was said (cadence position), if known
     let prepStep = options.prepAgeSeconds !== undefined && options.prepAgeSeconds !== null ? saidStep(options.prepAgeSeconds) : null;
     const prepStartStep = options.prepStartAgeSeconds !== undefined && options.prepStartAgeSeconds !== null
@@ -1343,7 +1351,7 @@ class FlightLogic {
     this.reportStatus();
     if (!options.deferTiming) return null;
     return {    // handle for judgeTiming
-      id, name, foot, action: cmd.action, stepAtGive: this.realSteps(),
+      id, name, foot, action: cmd.action, stepAtGive: this.realSteps(), footAtGive: this.footPosition(),
       stepSec: this.doubleTime ? this.doubleStepSeconds : this.stepSeconds,
       pending: this.pending, pendingOffset: this.pending ? Math.round(this.pending.at) - estimatedStep : 0,
     };

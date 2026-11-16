@@ -85,6 +85,7 @@ const DRILL = {
     [/\b(tench hut|tenchut|tenhut|ten hut)\b/g, 'ten hut'],
     [/\b(ah|a|at|uh) ten (chut|hut|shut)\b/g, 'ten hut'],   // "Ah-Ten-CHUT" (user's recording)
     [/\batten (chut|hut)\b/g, 'ten hut'],
+    [/\b(hayes|hays)\b/g, 'hace'],                 // "HAYES" = HACE (user, 2026-11-15)
     [/\bparade (rest|hest)\b/g, 'parade hest'],   // Parade, REST (DAFPAM) / Parade, HEST (user's inflection)
     [/\bpre sent\b/g, 'present'],                  // "Pre-sent" (chart) = Present, HARMS
     [/\bor der\b/g, 'order'],                      // "Or-der" (chart) = Order, HARMS
@@ -105,14 +106,15 @@ const DRILL = {
   // Words the microphone commonly hears instead (reported by the user) are mapped back.
   // Extra phrases the offline voice engine listens for (besides the commands themselves)
   // "Ah-Ten-CHUT": "chut" isn't an English word, so listen for the nearest real ones (chute, shut).
-  voicePhrases: ['at ten hut', 'a ten hut', 'at ten chute', 'a ten chute', 'ten chute', 'at ten shut', 'a ten shut', 'ten shut',
+  voicePhrases: ['right hayes', 'left hayes', 'about hayes', 'a bout hayes',
+                 'at ten hut', 'a ten hut', 'at ten chute', 'a ten chute', 'ten chute', 'at ten shut', 'a ten shut', 'ten shut',
                  'flight at ten hut', 'flight a ten hut', 'flight a ten chute', 'flight at ten chute'],
 
   voiceSpellings: [
     [/\b(?:(?:ah|a|at|uh) )?ten (chute|chut|shut|shoot|hut)\b/g, 'ten hut'],   // Ah-Ten-CHUT
     [/\b(fight|flite|flights|fright)\b/g, 'flight'],                            // "Flight"
     [/\b(march|heart|hearts|harsh|hard|arch|marsh|hatch|harp|hearth|harsch)\b/g, 'harch'],   // "HARCH"
-    [/\b(face|pace|phase|base|haze|faith)\b/g, 'hace'],                        // "HACE"
+    [/\b(face|pace|phase|base|haze|faith|hayes|hays)\b/g, 'hace'],            // "HACE"
     [/\b(then|ten|10|tent|tin|tench|than) (shut|hut|hot|hat|but|what)\b/g, 'ten hut'],   // "Ten-HUT"
     [/\b(tension|tenhut|tenshut)\b/g, 'ten hut'],
     [/\b(covered|covert|cuffer)\b/g, 'cover'],

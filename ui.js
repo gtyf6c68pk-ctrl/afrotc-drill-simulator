@@ -121,6 +121,25 @@ function startRun(def, flight) {
     },
     onClean: () => { clearTimeout(coachTimer); coachTimer = setTimeout(() => $('coach').classList.add('hidden'), 2500); },
     onObjective: o => { if (o.type !== 'movement') toast('✔ ' + o.label, 'good'); },   // movements: the drill card ticks
+    onBias: (kind, secs) => {                       // your commands are steadily early/late: offer a correction
+      const key = kind === 'voice' ? 'timingOffsetVoice' : 'timingOffsetTyped';
+      $('coach').innerHTML = '<div class="head">Timing</div><div class="what">Your last 8 ' + (kind === 'voice' ? 'spoken' : 'typed') +
+        ' commands were all about <b>' + Math.abs(secs).toFixed(2) + ' s ' + (secs > 0 ? 'late' : 'early') + '</b>. That steady offset is usually the ' +
+        (kind === 'voice' ? 'microphone / how a word lands on the beat' : 'keyboard') + ', not your rhythm.</div>' +
+        '<div class="fix"><button class="btn primary" id="biasFix">Correct for it</button> <button class="btn" id="biasNo">No thanks</button></div>';
+      $('coach').classList.remove('hidden');
+      clearTimeout(coachTimer);
+      $('biasNo').onclick = () => $('coach').classList.add('hidden');
+      $('biasFix').onclick = () => {
+        settings[key] = Math.max(-0.35, Math.min(0.35, Math.round(((settings[key] || 0) + secs) * 100) / 100));
+        saveSettings();
+        const o = flight.opts.timingOffset || (flight.opts.timingOffset = { voice: 0, typed: 0 });
+        o[kind] = settings[key];                    // applies right away
+        $('coach').classList.add('hidden');
+        toast('Timing correction for ' + (kind === 'voice' ? 'voice' : 'typing') + ': ' + fmtOffset(settings[key]), 'good');
+        setTimeout(() => $('commandBox').focus(), 0);
+      };
+    },
     onEnd: res => showResults(res),
   });
   activeRun = run;

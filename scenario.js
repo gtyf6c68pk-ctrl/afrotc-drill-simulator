@@ -50,6 +50,8 @@ class ScenarioRun {
     this.reportedIn = !def.reportIn;
     this.reportedOut = false;
     this.taps = { voice: [], typed: [] };      // timing calibration beats (seconds; + = late)
+    this.offsets = { voice: [], typed: [] };   // how early/late real commands were (to spot a steady delay)
+    this.biasOffered = {};
   }
 
   // TIMING CALIBRATION: one beat given (voice or Enter). Returns { good, message }.
@@ -204,6 +206,19 @@ class ScenarioRun {
         o.done = true; o.doneAt = at();
         if (this.cb.onObjective) this.cb.onObjective(o);
       });
+    }
+    // A steady delay: the last 8 commands (voice or typed) all early or late by about the same amount
+    // -> offer to correct for it (same as Practice -> Timing calibration, but from real commands)
+    const off = e.type === 'timing-graded' ? e.timingOffsetSec : e.type === 'command' && !e.deferredTiming ? e.timingOffsetSec : null;
+    if (off !== null && off !== undefined && e.foot && Math.abs(off) < 0.45 * this.flight.stepSeconds) {
+      const kind = e.voice ? 'voice' : 'typed', list = this.offsets[kind];
+      list.push(off);
+      if (list.length > 8) list.shift();
+      if (list.length === 8 && !this.biasOffered[kind]) {
+        const sorted = list.slice().sort((a, b) => a - b), mid = (sorted[3] + sorted[4]) / 2;
+        const steady = sorted[6] - sorted[1] < 0.2;                   // consistent, not just random
+        if (Math.abs(mid) >= 0.06 && steady && this.cb.onBias) { this.biasOffered[kind] = true; this.cb.onBias(kind, Math.round(mid * 100) / 100); }
+      }
     }
     // Mistakes (for the Practice coach) and streak objectives use the graded records
     if (e.type === 'command' || e.type === 'command-rejected' || e.type === 'timing-graded') {
