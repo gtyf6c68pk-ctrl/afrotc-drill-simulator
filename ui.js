@@ -27,7 +27,7 @@ const LINK = (() => {
            advance: q.get('advance') ? Number(q.get('advance')) : 0,
            at: q.get('at') ? q.get('at').split(',').map(Number) : null,
            scenario: q.get('scenario'), finish: q.get('finish') === '1',
-           seed: q.get('seed') ? Number(q.get('seed')) : null };
+           seed: q.get('seed') ? Number(q.get('seed')) : null, brief: q.get('brief') };
 })();
 
 // Give the commands from the page address (once, the first time a map opens). Call it at the
@@ -66,6 +66,7 @@ function showScreen(name) {
   $('screen-settings').classList.toggle('hidden', name !== 'settings');
   $('screen-results').classList.toggle('hidden', name !== 'results');
   $('screen-reference').classList.toggle('hidden', name !== 'reference');
+  $('screen-briefing').classList.toggle('hidden', name !== 'briefing');
   $('hud').classList.toggle('hidden', name !== 'play');
   if (name !== 'play') { $('minimapFrame').classList.add('hidden'); $('reference').classList.add('closed'); }
   if (name === 'settings') buildSettings();
@@ -141,6 +142,30 @@ function updateRunHud(force) {
   const clock = t && t.limitSeconds ? formatClock(t.limitSeconds - run.elapsed) : formatClock(run.elapsed);
   const pct = v => v === null ? '–' : v + '%';
   let html = '<div class="row"><b>' + esc(def.title) + '</b><span class="clock">' + clock + '</span></div>';
+  // Live missions: next checkpoint (distance + direction), progress, courtesy tally
+  if (def.mode === 'Live') {
+    const next = run.nextCheckpoint(), done = run.objectives.filter(o => o.done).length;
+    if (next) {
+      const deg = (Math.atan2(next.dx, -next.dy) * 180 / Math.PI + 360) % 360;
+      const compass = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(deg / 45) % 8];
+      html += '<div class="stats">Next: <b>' + esc(next.o.label) + '</b> · ' + Math.round(next.meters) + ' m ' + compass +
+              ' <span style="display:inline-block;transform:rotate(' + deg + 'deg)">⬆</span></div>';
+    } else if (run.objectives.some(o => o.type === 'movement')) {
+      html += '<div class="stats">Movements <b>' + done + ' / ' + run.objectives.length + '</b>: ' +
+              esc(run.objectives.filter(o => !o.done).map(o => o.label).join(', ')) + (run.inArea ? '' : ' · <span class="no">outside the field</span>') + '</div>';
+    }
+    html += '<div class="bar"><i style="width:' + (100 * done / run.objectives.length) + '%"></i></div>';
+    const c = run.courtesy && run.courtesy.summary();
+    if (c) html += '<div class="stats">Courtesy ✔ ' + c.correct + ' · missed ' + c.missed + ' · wrong ' + c.wrong + ' · no salute ' + c.noSalute +
+                   (run.offRoute > 1 && run.route ? ' · <span class="no">off route</span>' : '') + '</div>';
+    if (run.courtesy && activeScene && activeScene.difficulty && activeScene.difficulty.prompts) {
+      [...run.courtesy.open.values()].filter(it => !it.greeted || (run.courtesy.needsSalute(it.p) && !it.saluted)).forEach(it => {
+        html += '<div class="say">' + esc(personLabel(it.p)) + (run.courtesy.needsSalute(it.p) && !it.saluted ? ' — salute (SALUTE) and greet' : ' — greet') + '</div>';
+      });
+    }
+    $('objective').innerHTML = html;
+    return;
+  }
   // Tanks: lives, wave, score
   const tg = activeScene && activeScene.tanks;
   if (tg) {
@@ -213,6 +238,7 @@ function showResults(res) {
                        'reported-out': 'Reported out' }[res.status] || res.status;
   if (res.debrief) { showFdeResults(res, statusText); return; }
   if (res.tanks) { showTanksResults(res); return; }
+  if (res.live) { showLiveResults(res, statusText); return; }
   let h = '<h2>' + esc(res.title) + '</h2><p class="sub">' + esc(res.mode) + ' · ' + statusText + ' · time ' + formatClock(res.elapsed) + '</p>';
   h += '<div class="tiles">' +
        tile(s.given, 'commands given') +
@@ -282,6 +308,54 @@ function showFdeResults(res, statusText) {
   showScreen('results');
 }
 
+// Live mission briefing (before the flight steps off)
+function showBriefing(def, difficulty) {
+  if (LINK.brief === '0') return;                                // ?brief=0: straight to the map (screenshots)
+  let h = '<h2>' + esc(def.title) + '</h2><p class="sub">Live mission · ' + esc(difficulty.label) + ' · true-scale Auburn campus</p>';
+  h += '<h3>Briefing</h3><ul class="tips">' + def.briefing.map(t => '<li>' + esc(t) + '</li>').join('') + '</ul>';
+  h += '<h3>Objectives</h3><ol class="tips">' + def.objectives.map(o => '<li>' + esc(o.label) + '</li>').join('') + '</ol>';
+  h += '<h3>Remember</h3><ul class="tips"><li>Road guards (more than 8 in the flight): halt before the intersection, <code>Road Guards, OUT</code>, march through, <code>Road Guards, IN</code>.</li>' +
+       '<li>Stairs: <code>Route Step, HARCH</code> first, <code>Flight, Ten-HUT</code> after.</li>' +
+       '<li>Officers: type or say <code>SALUTE</code> and the greeting, e.g. <code>Good morning, sir</code>. POC: rank and name.' +
+       (COURTESY.confirmed ? '' : ' <span class="na">(greeting wording is a placeholder until your detachment confirms it)</span>') + '</li>' +
+       '<li>Score: 100 minus penalties (no road guards −15, obstacle −10, stairs at attention −5, missed greeting or salute −4, off route, refused or wrong-foot commands).</li></ul>';
+  h += '<div class="sheet-actions"><button class="btn" id="briefingMenu">☰ Main menu</button><button class="btn primary" id="briefingStart">▶ Start</button></div>';
+  $('briefingSheet').innerHTML = h;
+  $('briefingMenu').onclick = () => openScene('Menu');
+  $('briefingStart').onclick = () => { showScreen('play'); setTimeout(() => $('commandBox').focus(), 0); };
+  showScreen('briefing');
+}
+
+// Live mission debrief with the score
+function showLiveResults(res, statusText) {
+  const L = res.live, s = res.summary;
+  const tile = (v, l, cls) => '<div class="tile ' + (cls || '') + '"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>';
+  let h = '<h2>' + esc(res.title) + '</h2><p class="sub">Live mission · ' + esc(statusText) + ' · time ' + formatClock(res.elapsed) + '</p><div class="tiles">' +
+          tile(res.status === 'complete' ? L.score : '–', 'score / 100' + (res.status === 'complete' ? '' : ' (mission not completed)'),
+               res.status !== 'complete' ? 'bad' : L.score >= 90 ? 'good' : L.score >= 70 ? 'warn' : 'bad') +
+          tile(res.completed + ' / ' + res.objectives.length, 'objectives', res.completed === res.objectives.length ? 'good' : 'bad') +
+          tile(L.roadGuards.length, 'times road guards posted') +
+          tile(L.courtesy.correct + ' / ' + (L.courtesy.total || 0), 'courtesies correct', L.courtesy.total && L.courtesy.correct < L.courtesy.total ? 'warn' : 'good') +
+          tile(s.onTime === null ? '–' : s.onTime + '%', 'on the correct heel', s.onTime === null ? '' : s.onTime >= 90 ? 'good' : 'warn') +
+          tile(s.given, 'commands given') + '</div>';
+  h += '<h3>Points lost</h3>' + (L.breakdown.length ? '<table class="list"><tr><th>What</th><th>Times</th><th>Points</th></tr>' +
+       L.breakdown.map(b => '<tr><td>' + esc(b.label) + '</td><td>' + b.count + '</td><td class="no">−' + b.points + '</td></tr>').join('') + '</table>'
+       : '<p class="sub">None. Outstanding.</p>');
+  h += '<h3>Objectives</h3><ul class="checklist">' + res.objectives.map(o => '<li class="' + (o.done ? 'ok' : 'no') + '">' + (o.done ? '✔ ' : '✘ ') +
+       esc(o.label) + (o.done ? ' <span class="na">' + formatClock(o.doneAt) + '</span>' : '') + '</li>').join('') + '</ul>';
+  const cr = (L.courtesy.results || []).filter(r => r.outcome !== 'correct');
+  if (cr.length) h += '<h3>Courtesy to work on</h3>' + cr.map(r => '<div class="mistake"><b>' + esc(r.who) + '</b> — ' + esc(r.outcome.replace('-', ' ')) +
+       (r.detail ? ': ' + esc(r.detail) : '') + '<div class="fix">✔ "' + esc(r.expected) + '"</div></div>').join('');
+  const mistakes = s.mistakes.slice(-8);
+  if (mistakes.length) h += '<h3>Commands to work on</h3>' + mistakes.map(r => '<div class="mistake"><b>' + esc(r.text.trim()) + '</b> — ' +
+       esc(SCORING.problems(r).join('; ')) + '</div>').join('');
+  h += '<div class="sheet-actions"><button class="btn" id="resultsMenu">☰ Main menu</button><button class="btn primary" id="resultsAgain">↻ Again</button></div>';
+  $('resultsSheet').innerHTML = h;
+  $('resultsMenu').onclick = () => openScene('Menu');
+  $('resultsAgain').onclick = () => openScene('Campus');
+  showScreen('results');
+}
+
 // Tanks results
 function showTanksResults(res) {
   const t = res.tanks, s = res.summary;
@@ -316,6 +390,30 @@ function buildPracticeChoices() {
     b.onclick = e => { e.stopPropagation(); currentScenario = d.id; openScene(d.map); };
     $('practiceChoices').appendChild(b);
   });
+}
+
+// The Live card: difficulty + free march + missions (scenarios.js, mode 'Live')
+function buildLiveChoices() {
+  const seg = $('liveDifficulty');
+  seg.innerHTML = '';
+  Object.keys(LIVE_DIFFICULTY).forEach(k => {
+    const b = document.createElement('button');
+    b.textContent = LIVE_DIFFICULTY[k].label;
+    b.className = settings.liveDifficulty === k ? 'sel' : '';
+    b.onclick = e => { e.stopPropagation(); settings.liveDifficulty = k; saveSettings(); buildLiveChoices(); };
+    seg.appendChild(b);
+  });
+  const box = $('liveChoices');
+  box.innerHTML = '';
+  const add = (title, id, tip, primary) => {
+    const b = document.createElement('button');
+    b.className = 'btn' + (primary ? ' primary' : '');
+    b.textContent = title; b.title = tip || '';
+    b.onclick = e => { e.stopPropagation(); currentScenario = id; openScene('Campus'); };
+    box.appendChild(b);
+  };
+  Object.values(SCENARIOS).filter(d => d.mode === 'Live').forEach((d, i) => add(d.title, d.id, d.blurb, i === 0));
+  add('Free march', 'free', 'March anywhere on campus (no objectives)');
 }
 
 // The full command reference screen, from drill-rules.js
@@ -448,6 +546,7 @@ function buildSettings() {
 function wireUi() {
   buildCommandList();
   buildPracticeChoices();
+  buildLiveChoices();
   buildReference();
   if (LINK.scenario && SCENARIOS[LINK.scenario]) currentScenario = LINK.scenario;
   document.querySelectorAll('.card[data-open]').forEach(card => { card.onclick = () => openScene(card.dataset.open); });
@@ -481,7 +580,8 @@ function wireUi() {
 
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
-    if (!$('hud').classList.contains('hidden') || !$('screen-results').classList.contains('hidden')) openScene('Menu');
+    if (!$('hud').classList.contains('hidden') || !$('screen-results').classList.contains('hidden') ||
+        !$('screen-briefing').classList.contains('hidden')) openScene('Menu');
     else if (!$('screen-settings').classList.contains('hidden') || !$('screen-reference').classList.contains('hidden')) showScreen('menu');
   });
 }

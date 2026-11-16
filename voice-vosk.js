@@ -17,7 +17,7 @@
 // =====================================================================
 
 const VOSK_MODEL_URL = 'assets/vosk/vosk-model-small-en-us-0.15.tar.gz';
-const VOSK_END_WORDS = ['harch', 'hace', 'halt', 'cover', 'hut', 'right', 'left', 'hest', 'harms'];   // after clean-up
+const VOSK_END_WORDS = ['harch', 'hace', 'halt', 'cover', 'hut', 'right', 'left', 'hest', 'harms', 'out', 'in'];   // after clean-up
 const VOSK_HOLD_SECONDS = 4;   // how long a preparatory command waits for its command of execution
 
 // The phrases the recognizer may hear, made from drill-rules.js. HARCH/HACE aren't English

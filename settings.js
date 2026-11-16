@@ -49,6 +49,7 @@ const DEFAULT_SETTINGS = {
   campusStart: 'lowder',
   npcFlights: 3,
   campusPeople: 'on',
+  liveDifficulty: 'standard',
   disorder: 'normal',
   cdrSide: 'left',
   metronome: 'on',

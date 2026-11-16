@@ -211,6 +211,7 @@ class FlightLogic {
 
   // ---------- Who is in the flight ----------
   members()  { return this.elements.flat(); }                  // the cadets in the elements
+  inRanks()  { return this.marchers().filter(p => !p.roadGuard); }   // everyone marching with the flight right now
   marchers() { return [...this.members(), this.guide]; }       // everyone in the formation
   everyone() { return [...this.marchers(), this.commander].filter(p => p); }
 
@@ -235,7 +236,9 @@ class FlightLogic {
     this.halfStep = false;    // true after a column movement, until Forward, HARCH (DAFPAM 4.11)
     this.routeStep = false;   // true after Route Step / At Ease, HARCH, until Flight, Ten-HUT (DAFPAM 3.19)
     this.routeStepKind = 'ROUTE STEP';   // or 'AT EASE'
-    this.posture = 'attention';   // at the halt: 'attention', 'paradeRest' (3.3.1.1) or 'presentArms' (3.7)
+    this.posture = 'attention';
+    this.roadGuards = null;   // { ix, guards, crossed } while road guards are out (detachment SOP)
+    this.cdrHold = null;      // spot the commander holds (middle of the intersection) while they are out   // at the halt: 'attention', 'paradeRest' (3.3.1.1) or 'presentArms' (3.7)
     this.stepShift = 0;       // Change Step moves the cadence by one step
     this.changeStepAt = null; // step number when a Change Step finishes
     this.lastMovement = null; // 'column' or 'counter': the last movement that ends in a half step
@@ -316,7 +319,9 @@ class FlightLogic {
   formationType() {
     const h = this.mainDir();
     let da = 0, db = 0;
-    this.elements.forEach(el => {
+    this.elements.forEach(all => {
+      const el = all.filter(p => !p.roadGuard);          // road guards who are out don't count
+      if (!el.length) return;
       const ca = el.reduce((s, p) => s + aOf(p, h), 0) / el.length;
       const cb = el.reduce((s, p) => s + bOf(p, h), 0) / el.length;
       da += aOf(el[0], h) - ca;
@@ -327,7 +332,7 @@ class FlightLogic {
   }
 
   columnMovementInProgress() {
-    return this.marchers().some(p => p.turns.length > 0 || (p.group && p.group.remaining > 0));
+    return this.inRanks().some(p => p.turns.length > 0 || (p.group && p.group.remaining > 0));
   }
 
   // ---------- Guide and flight commander posts ----------
@@ -350,6 +355,7 @@ class FlightLogic {
   //  - Halted in line: 3 paces in front of, centered on, and facing the flight (DAFPAM 2.3.1)
   //  - Otherwise: alongside the flight on the danger side (normally left), 3/4 of the way back
   commanderPost() {
+    if (this.cdrHold) return this.cdrHold;
     if (this.cdrStayPut) return { x: this.commander.x, y: this.commander.y, dir: this.commander.dir };
     const h = this.mainDir();
     const m = this.members().filter(p => p.dir === h);
@@ -602,6 +608,7 @@ class FlightLogic {
       case 'routeStep':    return this.cmdRouteStep(cmd);
       case 'attention':    return this.cmdAttention(cmd);
       case 'paradeRest':   return this.cmdParadeRest(cmd);
+      case 'roadGuards':   return cmd.out ? this.cmdRoadGuardsOut(cmd) : this.cmdRoadGuardsIn(cmd);
       case 'presentArms':  return this.cmdPresentArms(cmd);
       case 'orderArms':    return this.cmdOrderArms(cmd);
       case 'cover':        return this.cmdCover(cmd);
@@ -962,6 +969,78 @@ class FlightLogic {
     return 'OK:' + cmd.say;
   }
 
+  // ---------- Road guards (detachment SOP; see DRILL.roadGuards) ----------
+  // The intersection the halted flight is in front of (guide within the approach distance), or null
+  intersectionAhead() {
+    const g = this.guide, f = DIRS[this.mainDir()];
+    let best = null, bd = Infinity;
+    this.intersections.forEach(ix => {
+      const d = Math.hypot(g.x - ix.x, g.y - ix.y);
+      const ahead = (ix.x - g.x) * f.x + (ix.y - g.y) * f.y > -ix.r;
+      if (ahead && d < ix.r + DRILL.roadGuards.approachPx && d < bd) { bd = d; best = ix; }
+    });
+    return best;
+  }
+
+  cmdRoadGuardsOut(cmd) {
+    const R = DRILL.roadGuards;
+    if (this.roadGuards) return 'The road guards are already out.';
+    if (this.marching) return 'Halt the flight before the intersection first, then command Road Guards, OUT.';
+    const ix = this.intersectionAhead();
+    if (!ix) return 'There is no intersection ahead of the flight to guard.';
+    if (this.marchers().length <= R.requiredAbove) return 'With 8 or fewer the flight commander acts as road guard (AFROTCI 36-2011 Vol 1).';
+    // Who: last rank, outside files (+ the middle file for a third guard)
+    const els = this.elements, count = els.length >= 4 ? Math.max(R.count, 3) : R.count;
+    const files = [0, els.length - 1, Math.floor(els.length / 2)].slice(0, count);
+    const guards = files.map(e => els[e][els[e].length - 1]);
+    // Where: each side of the crossing (perpendicular to the flight's march), a third one on the far side
+    const h = this.mainDir(), u = DIRS[h], r = DIRS[turnDir(h, 1)], reach = Math.max(ix.r - R.postPastEdgePx, ix.r * 0.6);
+    const posts = [
+      { x: ix.x - r.x * reach, y: ix.y - r.y * reach, dir: turnDir(h, -1) },   // left side, facing that traffic
+      { x: ix.x + r.x * reach, y: ix.y + r.y * reach, dir: turnDir(h, 1) },    // right side
+      { x: ix.x + u.x * reach, y: ix.y + u.y * reach, dir: h },                // far side
+    ];
+    guards.forEach((p, i) => { p.roadGuard = { post: posts[i] }; p.atPost = false; });
+    this.roadGuards = { ix, guards, crossed: false, cleared: false };
+    this.cdrHold = { x: ix.x - u.x * 30, y: ix.y - u.y * 30, dir: turnDir(h, 2) };   // the middle, facing the flight
+    this.log('road-guards', { event: 'out', name: ix.name, count: guards.length });
+    return 'OK:' + cmd.say + ' (' + guards.length + ' road guards to ' + ix.name + ')';
+  }
+
+  cmdRoadGuardsIn(cmd) {
+    const rg = this.roadGuards;
+    if (!rg) return 'No road guards are out.';
+    if (rg.guards.some(g => g.roadGuard.back)) return 'The road guards are already returning.';
+    if (!rg.crossed || !rg.cleared) return 'The flight has not passed ' + rg.ix.name + ' yet. Road Guards, IN once it has.';
+    rg.guards.forEach(g => { g.roadGuard.back = true; g.atPost = false; });
+    this.cdrHold = null;                           // the commander marches back to post
+    this.log('road-guards', { event: 'in', name: rg.ix.name });
+    return 'OK:' + cmd.say;
+  }
+
+  // Road guards run out to their posts, and back to their places in the flight
+  moveRoadGuards(dt) {
+    const rg = this.roadGuards, run = DRILL.roadGuards.runSpeedPx * dt;
+    rg.guards.forEach(g => {
+      if (!g.roadGuard) return;
+      if (!g.roadGuard.back) {
+        if (!g.atPost && walkToward(g, g.roadGuard.post, run)) { g.atPost = true; g.dir = g.roadGuard.post.dir; }
+        return;
+      }
+      // back to the place behind the person ahead of them in their file
+      const el = this.elements.find(e => e.includes(g)), i = el.indexOf(g), ahead = el[i - 1];
+      const spot = { x: ahead.x - DIRS[ahead.dir].x * DISTANCE_PX, y: ahead.y - DIRS[ahead.dir].y * DISTANCE_PX };
+      if (walkToward(g, spot, run + (this.marching ? STEP_PX * dt / this.stepSeconds : 0))) {
+        g.roadGuard = null; g.dir = ahead.dir; g.turns = []; g.group = null;
+      }
+    });
+    if (rg.guards.every(g => !g.roadGuard)) {
+      this.roadGuards = null;
+      this.log('road-guards', { event: 'back', name: rg.ix.name });
+      this.feedback('Road guards are back in the flight.', 'info');
+    }
+  }
+
   // Parade, HEST (3.3.1.1): only from attention at the halt
   cmdParadeRest(cmd) {
     if (this.marching) return 'Parade Rest is given at the halt. Halt the flight first.';
@@ -1113,6 +1192,11 @@ class FlightLogic {
       return;
     }
     // While marking time: Forward, HARCH or Flight, HALT.
+    // Road guards out: march straight through the intersection (SOP)
+    if (this.roadGuards && !DRILL.roadGuards.allowedWhileOut.includes(cmd.action)) {
+      this.reject(text, cmd.key, 'Road guards are out: march the flight straight through the intersection, then Road Guards, IN.');
+      return;
+    }
     // Parade rest: only Flight, Ten-HUT (3.3.2). Present arms: only Order, HARMS (3.7).
     if (this.posture === 'paradeRest' && cmd.action !== 'attention') {
       this.reject(text, cmd.key, 'The flight is at parade rest. Call it to attention first: Flight, Ten-HUT (DAFPAM 3.3.2).');
@@ -1236,6 +1320,7 @@ class FlightLogic {
           dist = groupMove.get(p.group);
         }
         if (p === this.guide && p.target) return;   // guide is walking to a new post (see below)
+        if (p.roadGuard) return;                     // road guards are out of the ranks (see moveRoadGuards)
         moveAlongPath(p, dist);
         if (this.sideStep) {                         // Right/Left Step: 12 inches every two counts
           p.x += this.sideStep.x * RIGHT_STEP_PX / 2 * dSteps;
@@ -1244,14 +1329,14 @@ class FlightLogic {
       });
 
       const b = this.opts.bounds;
-      if (this.marchers().some(p => p.x < b.x0 || p.x > b.x1 || p.y < b.y0 || p.y > b.y1)) {
+      if (this.inRanks().some(p => p.x < b.x0 || p.x > b.x1 || p.y < b.y0 || p.y > b.y1)) {
         this.stop();
         this.log('out-of-bounds', { area: this.opts.areaName });
         this.feedback('✘ The flight reached the edge of the ' + this.opts.areaName +
                       ' and stopped. Turn it before marching again.', false);
       } else if (this.opts.obstacleAt) {
         // Look half a step ahead of each person for a building
-        for (const p of this.marchers()) {
+        for (const p of this.inRanks()) {
           const d = DIRS[p.dir];
           const hit = this.opts.obstacleAt(p.x + d.x * STEP_PX / 2, p.y + d.y * STEP_PX / 2);
           if (hit) {
@@ -1308,6 +1393,7 @@ class FlightLogic {
     }
 
     if (this.guide.target && walkToward(this.guide, this.guide.target, WALK_SPEED * dt)) this.finishGuideMove();
+    if (this.roadGuards) this.moveRoadGuards(dt);
     const post = this.commanderPost();
     const cdr = this.commander;
     if (walkToward(cdr, this.routeAround(cdr, post), WALK_SPEED * dt) &&
@@ -1340,7 +1426,7 @@ class FlightLogic {
   trackIntersections() {
     const f = DIRS[this.mainDir()], g = this.guide;
     this.intersections.forEach(ix => {
-      const crossing = this.marchers().some(p => Math.hypot(p.x - ix.x, p.y - ix.y) < ix.r);
+      const crossing = this.inRanks().some(p => Math.hypot(p.x - ix.x, p.y - ix.y) < ix.r);
       const ahead = (ix.x - g.x) * f.x + (ix.y - g.y) * f.y > 0;
       const near = Math.hypot(g.x - ix.x, g.y - ix.y) < ix.r + DRILL.roadGuards.approachPx;
       const state = crossing ? 'crossing' : (this.marching && ahead && near) ? 'approaching' : null;
@@ -1349,6 +1435,15 @@ class FlightLogic {
       ix.state = state;
       const event = state || (wasActive ? 'cleared' : null);
       if (event) this.log('intersection', { event, name: ix.name });
+      // Road guards (SOP): required for flights larger than 8 (Vol 1)
+      const rg = this.roadGuards;
+      if (event === 'crossing' && rg && rg.ix === ix) rg.crossed = true;
+      if (event === 'cleared' && rg && rg.ix === ix) { rg.cleared = true; this.feedback('The flight has passed ' + ix.name + '. Command Road Guards, IN.', 'info'); }
+      if (event === 'crossing' && this.marchers().length > DRILL.roadGuards.requiredAbove &&
+          !(rg && rg.ix === ix && rg.guards.every(g => g.atPost))) {
+        this.log('no-road-guards', { name: ix.name });
+        this.feedback('⚠ The flight crossed ' + ix.name + ' without road guards posted. Halt before the intersection and command Road Guards, OUT.', 'warn');
+      }
       if (event && this.opts.onIntersection) this.opts.onIntersection(event, ix);
     });
   }

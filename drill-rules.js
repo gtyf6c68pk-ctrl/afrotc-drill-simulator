@@ -48,17 +48,24 @@ const DRILL = {
     unitWord: 'flight',    // "Flight" is the preparatory command of Flight, HALT / Flight, Ten-HUT (2.1.1.1)
   },
   // The command of execution: the last word(s) of every command
-  executionWords: ['harch', 'hace', 'halt', 'cover', 'ten hut', 'right', 'left', 'hest', 'harms'],
+  executionWords: ['harch', 'hace', 'halt', 'cover', 'ten hut', 'right', 'left', 'hest', 'harms', 'out', 'in'],
 
-  // ---------- Road guards (FOUNDATION ONLY: the detachment's procedure is not in DAFPAM
-  //            34-1203 and will be added later from the user's SOP) ----------
-  // The flight already reports intersections it approaches / crosses / clears
-  // (FlightLogic.trackIntersections -> options.onIntersection). When the procedure arrives:
-  // add its commands to `commands` above and its rules here.
+  // ---------- Road guards (user's detachment SOP, 2026-11-14; AFROTCI 36-2011 Vol 1 p. 25) ----------
+  //  1. Halt the flight before the intersection.  2. Road Guards, OUT: the flight commander marches to
+  //  the middle of the intersection and the road guards run out to guard each side, at parade rest
+  //  with the right hand extended (high-visibility belts).  3. March the flight through.
+  //  4. Once the flight has passed: Road Guards, IN: the guards run back to their places in the flight
+  //  and the commander returns to post.  Required for flights larger than 8 (Vol 1); with 7 or fewer
+  //  the flight commander acts as road guard.
   roadGuards: {
-    enabled: false,
-    approachPx: 490,       // "approaching" = the guide is within 15 m of an intersection, heading toward it
-    commands: [],          // e.g. post / recover commands, from the SOP
+    enabled: true,
+    approachPx: 490,       // "approaching" = the guide within 15 m of an intersection, heading toward it
+    count: 2,              // usually 2-3 road guards (user); 3 when the flight has 4 elements
+    from: 'last rank, outside files (+ middle file for a third guard)',   // proposed default (user: "propose in Phase 11")
+    requiredAbove: 8,      // flights larger than 8 need road guards (Vol 1)
+    runSpeedPx: 85,        // road guards run (~2.6 m/s)
+    postPastEdgePx: 20,    // guards stand this far inside the road from the intersection's edge
+    allowedWhileOut: ['forwardMarch', 'halt', 'markTime', 'halfStep', 'quickTime', 'changeStep', 'cover', 'roadGuards', 'attention', 'incline'],
   },
 
   // Cadence counts 1-4 (from the inflection chart). Counts 1 and 3 fall on the left foot (3.10.1).
@@ -77,6 +84,8 @@ const DRILL = {
     [/\bparade (rest|hest)\b/g, 'parade hest'],   // Parade, REST (DAFPAM) / Parade, HEST (user's inflection)
     [/\bpre sent\b/g, 'present'],                  // "Pre-sent, HARMS" (chart)
     [/\bor der\b/g, 'order'],                      // "Or-der, HARMS" (chart)
+    [/\broad ?guard (out|in)\b/g, 'road guards $1'],
+    [/\broadguards\b/g, 'road guards'],
     [/\bhalfright\b/g, 'half right'],
     [/\bhalfleft\b/g, 'half left'],
     [/\bninety\b/g, '90'],
@@ -207,6 +216,12 @@ const DRILL = {
       action: 'sideStep', turn: 1, note: '12-inch steps to the right until Flight, HALT', ref: '3.14' },
     { key: 'left step harch', say: 'Left Step, HARCH', label: 'Left Step', foot: null, when: 'halt',
       action: 'sideStep', turn: -1, note: '12-inch steps to the left until Flight, HALT', ref: '3.14' },
+    { key: 'road guards out', say: 'Road Guards, OUT', label: 'Road Guards, OUT', foot: null, when: 'halt',
+      action: 'roadGuards', out: true, note: 'at the halt before an intersection: guards post on each side, the commander goes to the middle',
+      ref: 'detachment SOP; AFROTCI 36-2011 Vol 1' },
+    { key: 'road guards in', say: 'Road Guards, IN', label: 'Road Guards, IN', foot: null, when: 'both',
+      action: 'roadGuards', out: false, note: 'once the whole flight has passed the intersection: guards return, commander back to post',
+      ref: 'detachment SOP; AFROTCI 36-2011 Vol 1' },
     { key: 'cover', say: 'COVER', label: 'COVER', foot: null, when: 'afterHalt',
       action: 'cover', note: 'straightens the flight out; required after every halt', ref: '4.4.2' },
   ],

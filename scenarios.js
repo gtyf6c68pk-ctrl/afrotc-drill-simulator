@@ -96,6 +96,90 @@ const SCENARIOS = {
       ],
     },
   },
+
+  // ---------- LIVE MODE MISSIONS (Phase 11; campus, true scale; positions in METERS) ----------
+  // Proposed from the user's route (CLAUDE.md "Campus realism") and AFROTCI 36-2011 Vol 1 (road guards,
+  // courtesy, drill). Checkpoints are reached in order (the flight's center within r meters).
+  liveLowder: {
+    id: 'liveLowder', title: 'Lowder to the drill field', mode: 'Live', map: 'Campus', hints: false, endWhenComplete: true,
+    blurb: 'March your flight from the Lowder Business Building to the Max Adams Morris Drill Field, with road guards at War Eagle Way.',
+    briefing: [
+      'Your flight is formed on the grass between Lowder and Horton-Hargrave, facing south.',
+      'Route: south between the two buildings, west along the north sidewalk of the parking lot, then south down the east side of S Donahue Dr.',
+      'Halt before the S Donahue Dr & War Eagle Way intersection and post road guards (Road Guards, OUT). March through, then Road Guards, IN.',
+      'Finish on the Max Adams Morris Drill Field. Greet and salute the people you pass. Take stairs at route step.',
+    ],
+    start: { x: 526, y: 40, dir: 4 },
+    route: [[526, 40], [526, 95], [464.5, 95], [464.5, 225], [415, 225]],   // on the sidewalk center lines
+    objectives: [
+      { type: 'checkpoint', id: 'between', label: 'Between Horton-Hargrave and Lowder', x: 526, y: 80, r: 12 },
+      { type: 'checkpoint', id: 'lot', label: 'North sidewalk of the parking lot', x: 490, y: 95, r: 12 },
+      { type: 'checkpoint', id: 'donahue', label: 'East sidewalk of S Donahue Dr', x: 464.5, y: 130, r: 12 },
+      { type: 'checkpoint', id: 'warEagle', label: 'Across War Eagle Way (road guards)', x: 464.5, y: 185, r: 12 },
+      { type: 'checkpoint', id: 'field', label: 'Max Adams Morris Drill Field', x: 420, y: 225, r: 16 },
+    ],
+  },
+  liveField: {
+    id: 'liveField', title: 'Drill on the Max Morris field', mode: 'Live', map: 'Campus', hints: false, endWhenComplete: true,
+    blurb: 'Run a drill session on the Max Adams Morris Drill Field without leaving it.',
+    briefing: [
+      'Your flight is formed in the center of the Max Adams Morris Drill Field, facing north.',
+      'Execute every movement on the list while staying inside the field. Commands given outside the field do not count.',
+    ],
+    start: { x: 420, y: 215, dir: 0 },
+    area: { x0: 378, y0: 176, x1: 446, y1: 243 },          // the field (meters)
+    route: null,
+    objectives: [
+      ['forward', 'Forward March', ['forward harch']], ['columnRight', 'Column Right', ['column right harch']],
+      ['columnLeft', 'Column Left', ['column left harch']], ['rightFlank', 'Right Flank', ['right flank harch']],
+      ['leftFlank', 'Left Flank', ['left flank harch']], ['toTheRear', 'To the Rear', ['to the rear harch']],
+      ['halfStep', 'Half Step', ['half step harch']], ['markTime', 'Mark Time', ['mark time harch']],
+      ['halt', 'Flight Halt', ['halt']], ['cover', 'Cover', ['cover']],
+    ].map(([id, label, keys]) => ({ type: 'movement', id, label, keys })),
+  },
+  liveVillage: {
+    id: 'liveVillage', title: 'Village loop', mode: 'Live', map: 'Campus', hints: false, endWhenComplete: true,
+    blurb: 'West along Thach Concourse through the plaza (road guards), around a Village block and back.',
+    briefing: [
+      'Your flight is formed at the east end of Thach Concourse, facing west, next to the drill field.',
+      'March west along the concourse. Halt before the Village plaza junction and post road guards.',
+      'Turn north at the next corner, east along the sidewalk beside War Eagle Way, and south back to the concourse.',
+      'Other flights use the concourse too: keep to your side. Greet and salute the people you pass.',
+    ],
+    start: { x: 400, y: 252.9, dir: 6 },
+    route: [[400, 252.9], [220.6, 252.8], [221.2, 164.6], [311.1, 164.9], [311.1, 253.1]],
+    objectives: [
+      { type: 'checkpoint', id: 'plaza', label: 'Through the Village plaza (road guards)', x: 255, y: 252.8, r: 10 },
+      { type: 'checkpoint', id: 'corner', label: 'Village corner', x: 220.6, y: 230, r: 12 },
+      { type: 'checkpoint', id: 'north', label: 'North side (War Eagle Way)', x: 240, y: 164.7, r: 12 },
+      { type: 'checkpoint', id: 'east', label: 'East side', x: 311, y: 190, r: 12 },
+      { type: 'checkpoint', id: 'back', label: 'Back on the concourse', x: 311, y: 245, r: 12 },
+    ],
+  },
+};
+
+// Live mode difficulty presets (Settings → Live difficulty; also on the Live card)
+const LIVE_DIFFICULTY = {
+  easy:     { label: 'Easy',     npcFlights: 1, people: 0.6, routeLine: true,  prompts: true },
+  standard: { label: 'Standard', npcFlights: 2, people: 1.0, routeLine: true,  prompts: true },
+  hard:     { label: 'Hard',     npcFlights: 3, people: 1.4, routeLine: false, prompts: false },
+};
+
+// Live mode score: start at 100, minus these points per mistake (no less than 0)
+const LIVE_SCORING = {
+  start: 100,
+  penalties: [
+    { key: 'noRoadGuards', label: 'Crossed an intersection without road guards', points: 15 },
+    { key: 'obstacle',     label: 'Marched into a building or obstacle',         points: 10 },
+    { key: 'stairs',       label: 'Stairs at attention (route step!)',           points: 5 },
+    { key: 'courtesyMissed', label: 'Greeting missed',                           points: 4 },
+    { key: 'noSalute',     label: 'Officer not saluted',                         points: 4 },
+    { key: 'courtesyWrong', label: 'Wrong greeting words',                       points: 2 },
+    { key: 'offRoute',     label: 'Off the route (per 10 s)',                    points: 2 },
+    { key: 'refused',      label: 'Command refused',                             points: 1 },
+    { key: 'wrongFoot',    label: 'Command on the wrong foot',                   points: 1 },
+  ],
+  routeCorridorM: 25,      // further than this from the planned route = off route
 };
 
 // Voice phrases for the FDE report in / out (the offline voice engine only listens for known phrases)

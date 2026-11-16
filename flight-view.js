@@ -88,6 +88,13 @@ class FlightView {
       s.leftArm.x = s.base.la; s.rightArm.x = s.base.ra;
       if (s.flag) s.flag.setRotation(0);
       const cdrSalute = p.kind === 'commander' && this.flight.cdrSaluting > 0;   // commander's own salute (courtesy)
+      s.belt.setVisible(!!p.roadGuard);
+      if (p.roadGuard && p.atPost) {               // road guard at post: parade rest, right hand extended (SOP)
+        s.leftBoot.x = s.base.lb - 1.6 * PX; s.rightBoot.x = s.base.rb + 1.6 * PX; s.leftBoot.y = 0; s.rightBoot.y = 0;
+        s.leftArm.x = s.base.la + 1.5 * PX; s.leftArm.y = 3;
+        s.rightArm.x = s.base.ra + 3 * PX; s.rightArm.y = -1;
+        return;
+      }
       if (posture === 'paradeRest') {
         s.leftArm.y = 3; s.rightArm.y = 3;
         s.leftArm.x = s.base.la + 1.5 * PX; s.rightArm.x = s.base.ra - 1.5 * PX;
@@ -169,7 +176,13 @@ class FlightView {
     block(head, OCP.light, -2, -4, 4, 1, 0.5);
     block(head, 0xffffff, -0.5, -8, 1, 1, 0.6);   // small "facing" marker
 
-    const parts = [leftBoot, rightBoot, leftArm, rightArm, body, head];
+    // High-visibility road guard belt (shown only while this cadet is a road guard)
+    const belt = add();
+    belt.fillStyle(0xc8ff1a, 1);
+    for (let i = -5; i <= 4; i++) belt.fillRect(i * PX, (-i * 0.5 - 1) * PX, PX, PX * 1.2);   // diagonal sash
+    belt.fillRect(-6 * PX, 1 * PX, 12 * PX, PX);                                              // waist belt
+    belt.setVisible(false);
+    const parts = [leftBoot, rightBoot, leftArm, rightArm, body, head, belt];
     let flag = null;
     if (kind === 'guide') {                       // the guidon: red pennant on a pole (blocky)
       flag = add();
@@ -183,7 +196,7 @@ class FlightView {
 
     const box = this.scene.add.container(0, 0, parts).setDepth(10);
     if (this.layer) { this.layer.add(shadow); this.layer.add(box); }   // maps with several cameras keep people in a layer
-    return { box, shadow, leftBoot, rightBoot, leftArm, rightArm, flag, offset: rand() * 2, angle: null,
+    return { box, shadow, leftBoot, rightBoot, leftArm, rightArm, flag, belt, offset: rand() * 2, angle: null,
              base: { lb: leftBoot.x, rb: rightBoot.x, la: leftArm.x, ra: rightArm.x } };
   }
 }

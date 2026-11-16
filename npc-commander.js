@@ -322,7 +322,7 @@ class NpcCommander {
   // Add a route from the end of the last leg to a new destination (random, or the goal)
   extendRoute(avoidEdge) {
     const last = this.legs[this.legs.length - 1];
-    if (!last || last.aim) return false;
+    if (!last || last.aim || last.fixed) return false;
     const live = this.net.live;
     for (let tries = 0; tries < 12; tries++) {
       let dest;
@@ -361,6 +361,51 @@ class NpcCommander {
     }
     this.legs.splice(this.nearCorner ? 2 : 1);
     this.extendRoute();
+  }
+
+  // AUTOPILOT (Phase 11): follow a fixed route (corner points, map units) instead of the network,
+  // then halt at the end. Used by the Live-mode tests (a scripted run of each mission) and as a demo.
+  followRoute(points) {
+    this.legs = [];
+    for (let i = 0; i + 1 < points.length; i++) {
+      const A = points[i], B = points[i + 1];
+      this.legs.push({ dir: dirOf(B.x - A.x, B.y - A.y), x1: A.x, y1: A.y, x2: B.x, y2: B.y, endNode: null, edge: null, edges: [], w: 0,
+                       fixed: true, last: i + 2 === points.length });
+    }
+    this.fixedRoute = true;
+    this.finished = false;
+  }
+
+  // ROAD GUARDS (detachment SOP) for flights that know the intersections: halt before it, Road Guards,
+  // OUT, wait for the guards to post, march through, Road Guards, IN once the flight has passed.
+  // Returns true while it is busy with the procedure (no steering then).
+  roadGuardStep(c, strike) {
+    const f = this.flight;
+    if (!f.intersections.length || f.marchers().length <= DRILL.roadGuards.requiredAbove) return false;
+    const rg = f.roadGuards;
+    if (rg) {
+      if (rg.cleared && !rg.guards.some(g => g.roadGuard && g.roadGuard.back)) this.tryGive('Road Guards, IN');
+      if (!f.marching && !f.needCover && rg.guards.every(g => g.atPost)) this.tryGive('Forward, HARCH');
+      return !f.marching;
+    }
+    if (!f.marching) {
+      if (f.needCover) { this.tryGive('COVER'); return true; }
+      if (this.rgPending) { this.rgPending = false; this.tryGive('Road Guards, OUT'); return true; }
+      return false;
+    }
+    // Approaching an intersection we haven't guarded yet: halt a few meters before it
+    const g = f.guide, u = DIRS[f.mainDir()];
+    this.rgDone = this.rgDone || new Set();
+    for (const ix of f.intersections) {
+      if (this.rgDone.has(ix.name)) continue;
+      const along = (ix.x - g.x) * u.x + (ix.y - g.y) * u.y, side = Math.abs((ix.x - g.x) * u.y - (ix.y - g.y) * u.x);
+      if (side < ix.r + 60 && along > 0 && along - ix.r < 9 * STEP_PX) {
+        if (f.columnMovementInProgress() || f.halfStep || f.markTime) return false;
+        if (this.tryGive('Flight, HALT', strike)) { this.rgDone.add(ix.name); this.rgPending = true; }
+        return true;
+      }
+    }
+    return false;
   }
 
   // Attack run (Phase 9): march straight through `point` along the nearest of the 8 directions
@@ -471,6 +516,8 @@ class NpcCommander {
     } else this.lastStrike = null;
 
     if (this.backOff) { this.doBackOff(c, strike); return; }
+    if (this.roadGuardStep(c, strike)) return;
+    if (this.finished) return;
     if (!f.marching) {                                         // at the halt
       if (f.needCover) { this.tryGive('COVER'); return; }
       if (f.pending || f.haltAt !== null) return;
@@ -628,7 +675,11 @@ class NpcCommander {
       const text = e > 0 ? 'Incline to the Left' : 'Incline to the Right';
       if (this.tryGive(text, strike)) this.correcting = true;
     }
-    // 4. Dead end ahead with no route: turn around in place
+    // 4. End of a fixed route: halt there. Dead end ahead with no route: turn around in place.
+    if (!N && L.last) {
+      if (toEnd < 60 && strike && this.tryGive('Flight, HALT', strike)) this.finished = true;
+      return;
+    }
     if (!N && toEnd < 320) this.turnAround = true;
   }
 }

@@ -39,11 +39,19 @@ class CampusScene extends Phaser.Scene {
     this.buildings = CAMPUS.buildings.map(b => ({ name: b.n || 'a building', pts: b.p, box: boxOf(b.p) }));
     this.buildFeatures();
 
+    // Live mission chosen on the menu (scenarios.js, mode 'Live'), or free march
+    const M = CAMPUS.pxPerMeter;
+    const def = SCENARIOS[currentScenario] && SCENARIOS[currentScenario].mode === 'Live' ? SCENARIOS[currentScenario] : null;
+    this.mission = def;
+    activeScene = this;
+    this.difficulty = LIVE_DIFFICULTY[settings.liveDifficulty] || LIVE_DIFFICULTY.standard;
+    const start = def ? { x: def.start.x * M, y: def.start.y * M, dir: def.start.dir } : campusStart();
+
     // The flight: rules in flight-logic.js, drawing in flight-view.js (people go in the world layer)
     this.flight = new FlightLogic({
       bounds: { x0: 15, y0: 15, x1: W - 15, y1: H - 15 },
-      start: campusStart(),
-      startDir: campusStart().dir,
+      start,
+      startDir: start.dir,
       areaName: 'campus map',
       obstacleAt: (x, y) => this.buildingAt(x, y) || this.npcAt(x, y),
       sidewalkEdge: (x, y, h) => this.sidewalkEdge(x, y, h),
@@ -59,10 +67,10 @@ class CampusScene extends Phaser.Scene {
     });
     this.flightView = new FlightView(this, this.flight, this.worldLayer);
     setActiveFlight(this.flight);
-    this.addNpcFlights(settings.npcFlights || 0);
-    this.addPeople();
+    this.addNpcFlights(def ? this.difficulty.npcFlights : (settings.npcFlights || 0));
+    this.addPeople(def ? this.difficulty.people : 1);
     this.events.once('shutdown', () => {
-      setActiveFlight(null); activeCamera = null;
+      setActiveFlight(null); activeCamera = null; activeRun = null; activeScene = null;
       this.scale.off('resize', this.placeMinimap, this);
       $('minimapFrame').classList.add('hidden');
     });
@@ -70,8 +78,15 @@ class CampusScene extends Phaser.Scene {
     // ---------- Cameras ----------
     const main = this.cameras.main;
     main.setBackgroundColor(CAMPUS_COLORS.ground);
-    setHud({ mode: 'Live · <b>Auburn campus</b> <span style="color:var(--muted);font-weight:400">(free march preview · true scale · N ↑)</span>',
+    setHud({ mode: 'Live · <b>' + (def ? esc(def.title) : 'Auburn campus') + '</b> <span style="color:var(--muted);font-weight:400">(' +
+                   (def ? this.difficulty.label : 'free march') + ' · true scale · N ↑)</span>',
              attribution: 'Map data © OpenStreetMap contributors · Tiles: Kenney.nl' });   // map license (required)
+    if (def) {
+      this.run = startRun(def, this.flight);
+      this.run.courtesy = this.courtesy || null;
+      this.drawMission(def);
+      showBriefing(def, this.difficulty);
+    }
     this.metronome = new FootMetronome(this.flight, settings.cadence);
 
     // Minimap (top-right, under the buttons): a second camera showing the whole campus
@@ -133,12 +148,12 @@ class CampusScene extends Phaser.Scene {
   }
 
   // Campus people (civilians, POC, cadre) and the courtesy checks (courtesy.js)
-  addPeople() {
+  addPeople(scale) {
     if (settings.campusPeople === 'off') return;
     let seed = LINK.seed ? LINK.seed + 99 : null;
     const rand = seed ? () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; } : Math.random;
     this.walkNet = walkwayNetwork(this);
-    this.people = new PeopleSim(this.walkNet, { rand });
+    this.people = new PeopleSim(this.walkNet, { rand, scale: scale || 1 });
     this.peopleView = new PeopleView(this, this.people, this.worldLayer);
     this.courtesy = new CourtesyMonitor(this.flight, {
       onResult: r => {
@@ -149,6 +164,32 @@ class CampusScene extends Phaser.Scene {
     });
     activeCourtesy = this.courtesy;
     this.events.once('shutdown', () => { activeCourtesy = null; });
+  }
+
+  // Live mission: the planned route (dashed, if the difficulty shows it) and the checkpoints
+  drawMission(def) {
+    const M = CAMPUS.pxPerMeter, g = this.add.graphics().setDepth(8);
+    this.worldLayer.add(g);
+    if (def.route && this.difficulty.routeLine) {
+      g.lineStyle(10, 0x4fa3ff, 0.55);
+      for (let i = 0; i + 1 < def.route.length; i++) {
+        const [x1, y1] = def.route[i], [x2, y2] = def.route[i + 1], len = Math.hypot(x2 - x1, y2 - y1) * M;
+        for (let d = 0; d < len; d += 60) {
+          const t0 = d / len, t1 = Math.min(1, (d + 34) / len);
+          g.lineBetween((x1 + (x2 - x1) * t0) * M, (y1 + (y2 - y1) * t0) * M, (x1 + (x2 - x1) * t1) * M, (y1 + (y2 - y1) * t1) * M);
+        }
+      }
+    }
+    if (def.area) {
+      g.lineStyle(8, 0xffd166, 0.7).strokeRect(def.area.x0 * M, def.area.y0 * M, (def.area.x1 - def.area.x0) * M, (def.area.y1 - def.area.y0) * M);
+    }
+    this.checkpointMarks = def.objectives.filter(o => o.type === 'checkpoint').map((o, i) => {
+      const ring = this.add.circle(o.x * M, o.y * M, o.r * M).setStrokeStyle(8, 0xffd166, 0.9).setFillStyle(0xffd166, 0.08).setDepth(8);
+      const num = this.add.text(o.x * M, o.y * M, String(i + 1), { fontFamily: 'Inter, sans-serif', fontStyle: '800', fontSize: '60px',
+        color: '#ffd166', stroke: '#10161e', strokeThickness: 8 }).setOrigin(0.5).setDepth(8);
+      this.worldLayer.add(ring); this.worldLayer.add(num);
+      return { o, ring, num };
+    });
   }
 
   // Move the computer-controlled flights and people (also used by the page-address fast-forward)
@@ -401,8 +442,21 @@ class CampusScene extends Phaser.Scene {
     this.flightView.sync(dt);
     this.stepOthers(dt);
     if (this.people) {
-      this.peopleView.sync(this.flight.commander, new Set([...this.courtesy.open.keys()]));
-      updateCourtesyHud(this.courtesy);
+      const prompts = !this.mission || this.difficulty.prompts;
+      this.peopleView.sync(this.flight.commander, prompts ? new Set([...this.courtesy.open.keys()]) : null);
+      if (!this.run) updateCourtesyHud(this.courtesy);
+    }
+    if (this.run) {
+      this.run.update(dt);
+      (this.checkpointMarks || []).forEach(m => {     // done = green, next = gold, later = faint (hidden on Hard)
+        const next = this.run.nextCheckpoint(), isNext = next && next.o === m.o;
+        const color = m.o.done ? 0x6be38a : 0xffd166;
+        m.ring.setStrokeStyle(8, color, m.o.done || isNext ? 0.95 : 0.35);
+        m.num.setColor(m.o.done ? '#6be38a' : '#ffd166').setAlpha(m.o.done || isNext ? 1 : 0.4);
+        const show = m.o.done || isNext || this.difficulty.routeLine;
+        m.ring.setVisible(show); m.num.setVisible(show);
+      });
+      updateRunHud();
     }
     (this.npcs || []).forEach(n => {
       n.view.sync(dt);

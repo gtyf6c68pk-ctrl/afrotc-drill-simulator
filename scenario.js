@@ -33,7 +33,13 @@ class ScenarioRun {
     this.started = !def.timer || def.timer.startOn === 'open';
     this.startClock = flight.clock;
     this.status = 'running';                    // running | complete | timeout | finished
-    this.area = def.areaUnits || null;          // the drill area in map units (set by the map)
+    // Campus scenarios (Live) give positions in meters; everything else in map units
+    this.scale = def.map === 'Campus' && typeof CAMPUS !== 'undefined' ? CAMPUS.pxPerMeter : 1;
+    const A = def.area;
+    this.area = def.areaUnits || (A && def.map === 'Campus' ? { x0: A.x0 * this.scale, y0: A.y0 * this.scale, x1: A.x1 * this.scale, y1: A.y1 * this.scale } : null);
+    this.route = def.route ? def.route.map(([x, y]) => ({ x: x * this.scale, y: y * this.scale })) : null;
+    this.offRoute = 0;                          // seconds spent off the planned route (Live)
+    this.courtesy = null;                       // CourtesyMonitor (Live, set by the campus map)
     this.inArea = true;
     this.boundaryBreaks = 0;
     this.objectives = (def.objectives || []).map(o => ({ ...o, done: false, doneAt: null, attempts: 0 }));
@@ -99,6 +105,7 @@ class ScenarioRun {
     fresh.forEach(e => this.handle(e));
     const t = this.def.timer;
     if (t && t.limitSeconds && this.started && this.elapsed >= t.limitSeconds) this.end('timeout');
+    this.checkCheckpoints(dt);
   }
 
   // Is every marcher inside the drill area? Count each time the flight breaks the boundary.
@@ -112,6 +119,50 @@ class ScenarioRun {
       if (this.cb.onBoundary) this.cb.onBoundary(false);
     } else if (!this.inArea && inside && this.cb.onBoundary) this.cb.onBoundary(true);
     this.inArea = inside;
+  }
+
+  // Live: checkpoints in order (the flight's center within r), and time spent off the route
+  checkCheckpoints(dt) {
+    if (!this.running) return;
+    const c = flightCenter(this.flight), S = this.scale;
+    const cur = this.objectives.find(o => o.type === 'checkpoint' && !o.done);
+    if (cur && Math.hypot(c.x - cur.x * S, c.y - cur.y * S) <= cur.r * S) {
+      if (!this.started) { this.started = true; this.startClock = this.flight.clock; }
+      cur.done = true; cur.doneAt = this.elapsed;
+      if (this.cb.onObjective) this.cb.onObjective(cur);
+      if (this.def.endWhenComplete && this.objectives.every(o => o.done)) this.end('complete');
+    }
+    if (this.route && this.started) {
+      let best = Infinity;
+      for (let i = 0; i + 1 < this.route.length; i++) {
+        best = Math.min(best, distanceToLine(c.x, c.y, [this.route[i].x, this.route[i].y, this.route[i + 1].x, this.route[i + 1].y]));
+      }
+      if (best > LIVE_SCORING.routeCorridorM * S) this.offRoute += dt;
+    }
+  }
+
+  // The next checkpoint and how far it is (meters), for the HUD
+  nextCheckpoint() {
+    const cur = this.objectives.find(o => o.type === 'checkpoint' && !o.done);
+    if (!cur) return null;
+    const c = flightCenter(this.flight), S = this.scale;
+    return { o: cur, meters: Math.hypot(c.x - cur.x * S, c.y - cur.y * S) / S, dx: cur.x * S - c.x, dy: cur.y * S - c.y };
+  }
+
+  // Live score: 100 minus penalties (LIVE_SCORING)
+  liveScore(res) {
+    const ev = type => this.events.filter(e => e.type === type);
+    const cs = this.courtesy ? this.courtesy.summary() : { missed: 0, wrong: 0, noSalute: 0 };
+    const counts = {
+      noRoadGuards: ev('no-road-guards').length, obstacle: ev('obstacle').length,
+      stairs: ev('stairs').filter(e => e.atAttention).length,
+      courtesyMissed: cs.missed, noSalute: cs.noSalute, courtesyWrong: cs.wrong,
+      offRoute: Math.floor(this.offRoute / 10), refused: res.summary.refused, wrongFoot: res.summary.wrongFoot,
+    };
+    const breakdown = LIVE_SCORING.penalties.map(p => ({ label: p.label, count: counts[p.key] || 0, points: (counts[p.key] || 0) * p.points }))
+      .filter(b => b.count);
+    const score = Math.max(0, LIVE_SCORING.start - breakdown.reduce((s, b) => s + b.points, 0));
+    return { score, breakdown, courtesy: cs, roadGuards: ev('road-guards').filter(e => e.event === 'out').map(e => e.name) };
   }
 
   handle(e) {
@@ -188,6 +239,7 @@ class ScenarioRun {
     };
     if (this.def.efficientOrder) res.debrief = this.debrief(res);
     if (this.extra) res.tanks = this.extra();   // mode-specific results (Tanks)
+    if (this.def.mode === 'Live') res.live = this.liveScore(res);
     return res;
   }
 

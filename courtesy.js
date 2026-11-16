@@ -35,12 +35,14 @@ class PeopleSim {
     this.people = [];
     const roster = (opts && opts.roster) || (typeof ROSTER !== 'undefined' ? ROSTER : { poc: [], cadre: [] });
     const pick = (list, n) => list.slice().sort(() => this.rand() - 0.5).slice(0, n);
-    for (let i = 0; i < P.civilians; i++) {
+    const k = (opts && opts.scale) || 1;                     // difficulty: more or fewer people
+    const n = v => Math.round(v * k);
+    for (let i = 0; i < n(P.civilians); i++) {
       const sub = P.civilianKinds[Math.floor(this.rand() * P.civilianKinds.length)];
       this.add({ kind: 'civilian', sub, sex: this.rand() < 0.5 ? 'M' : 'F' });
     }
-    pick(roster.poc, P.poc).forEach(r => this.add({ kind: 'poc', person: r, sex: r.sex }));
-    pick(roster.cadre, P.cadre).forEach(r => this.add({ kind: 'cadre', person: r, sex: r.sex }));
+    pick(roster.poc, n(P.poc)).forEach(r => this.add({ kind: 'poc', person: r, sex: r.sex }));
+    pick(roster.cadre, Math.max(1, n(P.cadre))).forEach(r => this.add({ kind: 'cadre', person: r, sex: r.sex }));
   }
 
   add(p) {

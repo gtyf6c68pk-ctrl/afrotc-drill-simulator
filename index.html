@@ -185,9 +185,11 @@
           <span class="badge go">Ready</span><div class="icon">⚔</div>
           <h3>Tanks</h3><p>Out-maneuver enemy flights with drill commands: hit their flank with your front before they hit yours.</p>
         </div>
-        <div class="card panel" data-open="Campus">
-          <span class="badge go">Preview</span><div class="icon">⌖</div>
-          <h3>Live</h3><p>Campus missions (Phase 11). For now: free march on the Auburn campus, stairs and intersections included.</p>
+        <div class="card panel choices">
+          <span class="badge go">Ready</span><div class="icon">⌖</div>
+          <h3>Live</h3><p>Campus missions on true-scale Auburn: route, road guards, other flights, and people to greet and salute.</p>
+          <div class="seg" id="liveDifficulty" style="margin-top:10px"></div>
+          <div class="card-actions" id="liveChoices"><!-- built from scenarios.js --></div>
         </div>
       </div>
       <div class="menu-actions">
@@ -215,6 +217,11 @@
   <!-- ===== Results / debrief (built by showResults in ui.js) ===== -->
   <div id="screen-results" class="screen hidden">
     <div class="sheet panel" id="resultsSheet"></div>
+  </div>
+
+  <!-- ===== Live mission briefing (built by showBriefing in ui.js) ===== -->
+  <div id="screen-briefing" class="screen hidden">
+    <div class="sheet panel" id="briefingSheet"></div>
   </div>
 
   <!-- ===== Command reference (built from drill-rules.js by buildReference in ui.js) ===== -->
