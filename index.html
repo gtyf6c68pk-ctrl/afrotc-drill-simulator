@@ -184,6 +184,11 @@
     #reference ul { padding-left: 18px; margin: 4px 0; }
     code { background: #1f2a37; padding: 1px 5px; border-radius: 3px; font-size: 12.5px; color: #fff; }
     #minimapFrame.hud-off { display: none !important; }
+    .fb-input { width: 100%; font: 500 15px var(--sans); color: var(--text); background: #0f151d; border: 1px solid #2c3846; border-radius: 4px; padding: 9px 11px; }
+    select.fb-input { width: auto; }
+    .fb-label { display: block; font-weight: 600; font-size: 14.5px; margin: 14px 0 6px; }
+    .fb-check { display: block; margin-top: 10px; color: #c3cdd7; font-size: 14px; }
+    .fb-pre { white-space: pre-wrap; font-size: 12px; color: #93a1b0; background: #0f151d; padding: 10px; border-radius: 4px; max-height: 200px; overflow: auto; }
     #minimapFrame { position: fixed; border: 2px solid rgba(255, 255, 255, 0.75); border-radius: 4px; pointer-events: none;
                     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45); }
     #toasts { position: fixed; top: 80px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
@@ -226,6 +231,7 @@
         <button class="btn" id="menuSettings">⚙ Settings</button>
         <button class="btn" id="menuCommands">? Command reference</button>
         <button class="btn" id="menuStats">📈 My stats</button>
+        <button class="btn" id="menuFeedback">💬 Feedback / report a bug</button>
       </div>
       <div class="fineprint">Drill per DAFPAM 34-1203 and AFROTCI 36-2011 Vol 1. All names in the game are fictional.
         Map data © OpenStreetMap contributors · Tiles: Kenney.nl · Full credits in CREDITS.md</div>
@@ -253,6 +259,25 @@
   <!-- ===== My stats (built by showStats in ui.js from stats.js; saved on this device only) ===== -->
   <div id="screen-stats" class="screen hidden">
     <div class="sheet panel" id="statsSheet"></div>
+  </div>
+
+  <!-- ===== Feedback / bug report (ui.js showFeedbackScreen; goes to the user's Google Form) ===== -->
+  <div id="screen-feedback" class="screen hidden">
+    <div class="sheet panel">
+      <h2>Feedback &amp; bug reports</h2>
+      <p class="sub">Tell us what to fix or improve. No name or account needed.</p>
+      <div class="setting"><label for="fbType">What is it about?</label><select id="fbType" class="fb-input"></select></div>
+      <label for="fbText" class="fb-label">What happened, or what should change? (For a bug: what you did, what you expected, what happened.)</label>
+      <textarea id="fbText" class="fb-input" rows="6" placeholder="e.g. I gave Column Right, HARCH on the right heel at 120 and it said wrong foot."></textarea>
+      <label class="fb-check"><input type="checkbox" id="fbDetails" checked> Include game details (mode, settings, your last commands, browser). No personal information.</label>
+      <details><summary>Show the game details that will be sent</summary><pre id="fbPreview" class="fb-pre"></pre></details>
+      <p class="sub" id="fbStatus"></p>
+      <div class="sheet-actions">
+        <button class="btn" id="fbBack">◀ Back</button>
+        <button class="btn" id="fbCopy">Copy report</button>
+        <button class="btn primary" id="fbSend">Open the form to send ↗</button>
+      </div>
+    </div>
   </div>
 
   <!-- ===== Live mission briefing (built by showBriefing in ui.js) ===== -->
@@ -300,6 +325,7 @@
       <button class="btn hidden" id="btnMap" title="Show / hide the minimap">🗺 Map</button>
       <button class="btn" id="btnHudEdit" title="Edit the screen layout: drag panels by their title, minimize or maximize them">✎ HUD</button>
       <button class="btn hidden" id="btnHudReset" title="Put every panel back where it started">Reset layout</button>
+      <button class="btn icon" id="btnFeedback" title="Send feedback or report a bug">💬</button>
       <button class="btn" id="btnMenu" title="Main menu (Esc)">☰ Menu</button>
     </div>
     <section class="hudp" id="p-card" data-panel="card" data-title="Drill card"><div id="drillCard" class="panel pbody hidden"></div></section>
@@ -355,6 +381,7 @@
   <script src="scoring.js"></script>
   <script src="scenario.js"></script>
   <script src="scenarios.js"></script>
+  <script src="feedback-config.js"></script>
   <script src="stats.js"></script>
   <script src="flight-view.js"></script>
   <script src="metronome.js"></script>

@@ -56,6 +56,7 @@ function giveLinkCommands(scene, flight) {
   if (scene.update) scene.update(0, 16);   // one normal frame, so the per-frame code is exercised too
   if (activeRun) { activeRun.update(0); updateRunHud(true); }
   if (LINK.finish && activeRun) { LINK.finish = false; activeRun.finish(); }
+  if (new URLSearchParams(location.search).get('feedback') === '1') showFeedbackScreen();   // (screenshots)
 }
 
 const $ = id => document.getElementById(id);
@@ -68,8 +69,10 @@ function showScreen(name) {
   $('screen-reference').classList.toggle('hidden', name !== 'reference');
   $('screen-briefing').classList.toggle('hidden', name !== 'briefing');
   $('screen-stats').classList.toggle('hidden', name !== 'stats');
+  $('screen-feedback').classList.toggle('hidden', name !== 'feedback');
   $('hud').classList.toggle('hidden', name !== 'play');
   if (name !== 'play') { $('minimapFrame').classList.add('hidden'); $('reference').classList.add('closed'); }
+  else if (typeof activeScene !== 'undefined' && activeScene && activeScene.minimap) $('minimapFrame').classList.remove('hidden');   // back from Feedback
   if (name === 'settings') buildSettings();
   if (name !== 'play') $('toasts').innerHTML = '';
 }
@@ -346,6 +349,70 @@ function showFdeResults(res, statusText) {
   $('resultsMenu').onclick = () => openScene('Menu');
   $('resultsAgain').onclick = () => openScene('DrillPad');
   showScreen('results');
+}
+
+// ---------- Feedback / bug reports (feedback-config.js: the user's Google Form) ----------
+let feedbackReturn = 'menu';
+// The game details sent with a report: no names or personal data
+function feedbackDetails() {
+  const lines = ['Game version: ' + FEEDBACK.version, 'Browser: ' + navigator.userAgent.replace(/\s+/g, ' ').slice(0, 160),
+                 'Screen: ' + window.innerWidth + 'x' + window.innerHeight];
+  if (activeRun) lines.push('Mode: ' + activeRun.def.mode + ' / ' + activeRun.def.title + ' (' + formatClock(activeRun.elapsed) + ')');
+  else if (activeFlight) lines.push('Map: ' + (activeScene && activeScene.scene ? activeScene.scene.key : 'free march'));
+  lines.push('Settings: cadence ' + settings.cadence + ', ' + settings.elements + 'x' + settings.elementSize + ', voice ' + settings.voiceEngine +
+             ', voice delay ' + settings.voiceDelay + ', timing correction voice ' + fmtOffset(settings.timingOffsetVoice) + ' / typed ' + fmtOffset(settings.timingOffsetTyped) +
+             ', grade prep ' + settings.gradePrep);
+  if (activeFlight) {
+    lines.push('Status: ' + activeFlight.statusText());
+    lines.push('Last commands:');
+    activeFlight.events.filter(e => e.type === 'command' || e.type === 'command-rejected' || e.type === 'timing-graded').slice(-15).forEach(e => {
+      lines.push('  ' + e.time.toFixed(1) + 's ' + (e.type === 'command' ? '✔ ' + e.text + (e.problems && e.problems.length ? ' — ' + e.problems.join('; ') : '')
+        : e.type === 'timing-graded' ? '  timing: ' + (e.problem || 'on time') + (e.timingOffsetSec !== undefined ? ' (' + e.timingOffsetSec + ' s)' : '')
+        : '✘ ' + e.text + ' — ' + e.reason));
+    });
+  }
+  const msgs = [...$('log').children].map(m => m.textContent);
+  if (msgs.length) lines.push('On-screen messages:', ...msgs.map(m => '  ' + m));
+  return lines.join('\n').slice(0, FEEDBACK.maxDetails);
+}
+
+function showFeedbackScreen() {
+  feedbackReturn = $('hud').classList.contains('hidden') ? 'menu' : 'play';
+  if (!$('fbType').options.length) FEEDBACK.types.forEach(t => { const o = document.createElement('option'); o.textContent = t; $('fbType').appendChild(o); });
+  $('fbPreview').textContent = feedbackDetails();
+  $('fbStatus').textContent = FEEDBACK.prefillLink ? '' :
+    'The feedback form isn\'t connected yet: use "Copy report" and send it to your detachment for now.';
+  $('fbSend').classList.toggle('hidden', !FEEDBACK.prefillLink);
+  showScreen('feedback');
+  setTimeout(() => $('fbText').focus(), 0);
+}
+
+function feedbackReport() {
+  return { type: $('fbType').value, text: $('fbText').value.trim(), details: $('fbDetails').checked ? $('fbPreview').textContent : '(not included)' };
+}
+
+// The Google Form's pre-filled link with TYPE / TEXT / DETAILS replaced by the report
+function feedbackFormUrl(r) {
+  return FEEDBACK.prefillLink.replace('=TYPE', '=' + encodeURIComponent(r.type)).replace('=TEXT', '=' + encodeURIComponent(r.text))
+    .replace('=DETAILS', '=' + encodeURIComponent(r.details));
+}
+
+function wireFeedback() {
+  $('menuFeedback').onclick = showFeedbackScreen;
+  $('btnFeedback').onclick = showFeedbackScreen;
+  $('fbBack').onclick = () => showScreen(feedbackReturn);
+  $('fbSend').onclick = () => {
+    const r = feedbackReport();
+    if (!r.text) { $('fbStatus').textContent = 'Please write what happened or what should change.'; return; }
+    window.open(feedbackFormUrl(r), '_blank', 'noopener');
+    $('fbStatus').textContent = 'The form opened in a new tab with your report filled in: click Submit there. Thank you!';
+  };
+  $('fbCopy').onclick = () => {
+    const r = feedbackReport(), txt = '[' + r.type + ']\n' + r.text + '\n\n' + r.details;
+    (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(
+      () => { $('fbStatus').textContent = 'Report copied: paste it into a message to your detachment.'; },
+      () => { $('fbPreview').textContent = txt; $('fbStatus').textContent = 'Select the text under "Show the game details" and copy it.'; });
+  };
 }
 
 // My stats: progress over time, best per mode, accuracy by command (stats.js; this device only)
@@ -740,6 +807,7 @@ function wireUi() {
   buildPracticeChoices();
   buildLiveChoices();
   initHudPanels();
+  wireFeedback();
   buildReference();
   if (LINK.scenario && SCENARIOS[LINK.scenario]) currentScenario = LINK.scenario;
   document.querySelectorAll('.card[data-open]').forEach(card => { card.onclick = () => openScene(card.dataset.open); });
@@ -776,6 +844,7 @@ function wireUi() {
     if (e.key !== 'Escape') return;
     if (!$('hud').classList.contains('hidden') || !$('screen-results').classList.contains('hidden') ||
         !$('screen-briefing').classList.contains('hidden')) openScene('Menu');
+    else if (!$('screen-feedback').classList.contains('hidden')) showScreen(feedbackReturn);
     else if (!$('screen-settings').classList.contains('hidden') || !$('screen-reference').classList.contains('hidden') ||
              !$('screen-stats').classList.contains('hidden')) showScreen('menu');
   });
