@@ -31,8 +31,10 @@ const SCENARIOS = {
   fde: {
     id: 'fde', title: 'Flight Drill Evaluation', mode: 'FDE', map: 'DrillPad', hints: false,
     blurb: 'All 20 scorecard movements in under 5:00 inside the cones. Learn the most efficient order.',
-    pad: { w: 44, h: 44, area: 20, elements: 3, elementSize: 4 },   // steps; area = 40 ft square of cones
-    start: { x: 4.8, y: 14.5, dir: 0 },     // where the flight starts in the area (steps from its NW cone), facing North
+    // Cone square enlarged 1.5x (user, 2026-11-15: cadets broke the 40 ft boundary immediately): 30 steps = 60 ft
+    pad: { w: 56, h: 56, area: 30, elements: 3, elementSize: 4 },   // steps
+    start: { x: 7.2, y: 21.8, dir: 0 },     // where the flight starts in the area (steps from its NW cone), facing North
+    rules: { coverAfterHalt: false },       // user: in the FDE, COVER is commanded once (not after every halt)
     planningSeconds: 60,
     timer: { limitSeconds: 300, startOn: 'first-command' },
     reportIn:  { say: 'Sir/Ma\'am, A Flight is ready for drill evaluation.',
@@ -52,19 +54,19 @@ const SCENARIOS = {
       ['orderArms', 'Order Arms', ['order harms']], ['markTime', 'Mark Time', ['mark time harch']],
       ['halt', 'Flight Halt', ['halt']], ['cover', 'Cover', ['cover']],
     ].map(([id, label, keys]) => ({ type: 'movement', id, label, keys })),
-    // An efficient order (25 commands: the 20 movements + the halts/covers the side steps need + 2 Forwards
-    // to leave mark time / half step). Checked by tests/fde.test.js: all 20 count, the flight stays inside
+    // An efficient order (23 commands: the 20 movements + 2 more halts (each side step ends with one)
+    // + 1 more Forward (out of mark time and out of the half step)). Checked by tests/fde.test.js: all 20 count, the flight stays inside
     // the cones from the start spot above, well under 5:00 at 60 or 120 steps/min.
     efficientOrder: [
       'Parade, HEST', 'Flight, Ten-HUT', 'Present, HARMS', 'Order, HARMS', 'Right, HACE', 'Left, HACE',
-      'Right Step, HARCH', 'Flight, HALT', 'COVER', 'Left Step, HARCH', 'Flight, HALT', 'COVER', 'A-bout, HACE',
+      'Right Step, HARCH', 'Flight, HALT', 'COVER', 'Left Step, HARCH', 'Flight, HALT', 'A-bout, HACE',
       'To the Rear, HARCH', 'Change Step, HARCH', 'Left Flank, HARCH', 'Right Flank, HARCH', 'Column Right, HARCH',
       'Mark Time, HARCH', 'Forward, HARCH', 'Half Step, HARCH', 'Forward, HARCH', 'Column Left, HARCH',
-      'Flight, HALT', 'COVER',
+      'Flight, HALT',
     ],
     efficientNotes: [
       'Do every at-the-halt movement first, in one block: Parade Rest, Attention, Present/Order Arms, the facings and both side steps.',
-      'Each side step ends with Flight, HALT and COVER, which also checks off Flight Halt and Cover.',
+      'Each side step ends with Flight, HALT, which also checks off Flight Halt. In the FDE, COVER is given once (after the first halt); it is not required after every halt.',
       'A-bout, HACE puts the flight in inverted column; To the Rear, HARCH from the halt turns it back into column and steps off in one command.',
       'Use the cheap movements (Change Step, flanks, Mark Time, Half Step) between the column movements so the flight stays inside the cones.',
       'Column movements end in a half step and need Forward, HARCH; plan them so that Forward also counts toward the card.',

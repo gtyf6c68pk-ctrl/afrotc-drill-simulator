@@ -559,7 +559,8 @@ class FlightLogic {
     this.routeStep = false;
     this.changeStepAt = null;
     this.clearTimedActions();
-    this.needCover = true;    // after every halt the commander must command COVER
+    // after every halt the commander must command COVER (not in the FDE: opts.coverAfterHalt = false)
+    this.needCover = this.opts.coverAfterHalt !== false;
     if (!this.columnMovementInProgress()) this.relocateGuideIfNeeded();
   }
 
@@ -1325,7 +1326,7 @@ class FlightLogic {
       if (this.haltAt !== null && steps >= this.haltAt) {
         this.stop();
         this.log('halted', {});
-        this.feedback('Flight halted. Command COVER.', true);
+        this.feedback(this.needCover ? 'Flight halted. Command COVER.' : 'Flight halted.', true);
       }
       if (this.shortStepUntil !== null && steps >= this.shortStepUntil) this.shortStepUntil = null;
     }
