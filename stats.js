@@ -57,6 +57,7 @@ const STATS = {
 
   record(res, when) {
     if (!res || !res.records || (!res.records.length && res.status !== 'complete')) return null;   // nothing happened
+    if (res.scenario === 'calibrate') return null;                                                 // not a drill session
     const entry = this.summarize(res, when);
     const list = this.sessions();
     list.push(entry);

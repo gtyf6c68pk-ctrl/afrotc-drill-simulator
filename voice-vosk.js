@@ -77,9 +77,15 @@ const voskEngine = {
       this.recognizer.on('result', m => this.onResult(m.result || {}));
 
       this.node = this.audio.createScriptProcessor(2048, 1, 1);
+      // When did the first audio sample happen (on the page clock)? Each chunk arrives a little after
+      // its sound; the EARLIEST estimate over all chunks is the most accurate (the first chunk alone can
+      // be late by 0.1-0.3 s, which shifted every word time: commands on time were graded late).
       this.audioStartMs = null;
+      this.samplesIn = 0;
       this.node.onaudioprocess = e => {
-        if (this.audioStartMs === null) this.audioStartMs = performance.now() - e.inputBuffer.duration * 1000;
+        this.samplesIn += e.inputBuffer.length;
+        const est = performance.now() - this.samplesIn / e.inputBuffer.sampleRate * 1000;
+        if (this.audioStartMs === null || est < this.audioStartMs) this.audioStartMs = est;
         try { this.recognizer.acceptWaveform(e.inputBuffer); } catch (err) { /* ignore one bad chunk */ }
       };
       this.audio.createMediaStreamSource(this.stream).connect(this.node);
@@ -180,7 +186,7 @@ const voskEngine = {
         this.carry = { words: rest.map(w => w.word), times: rest.map(toMs), until: performance.now() + VOSK_HOLD_SECONDS * 1000 };
         voice.status('🎤 Heard: “' + text + '” … waiting for the command of execution', 'good');
       } else if (activeFlight) {
-        routeCommand(text, { voice: true });   // a report to the evaluator, or "not a command I know"
+        routeCommand(text, { voice: true, ageSeconds: saidAt !== null ? (performance.now() - saidAt) / 1000 : settings.voiceDelay });   // a report, a calibration beat, or "not a command I know"
       }
     } else if (note && this.lastHeard) {
       voice.status('🎤 Heard: “' + this.lastHeard + '”' + note, 'good');

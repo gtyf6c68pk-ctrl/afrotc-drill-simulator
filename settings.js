@@ -50,6 +50,8 @@ const DEFAULT_SETTINGS = {
   npcFlights: 3,
   campusPeople: 'on',
   liveDifficulty: 'standard',
+  timingOffsetVoice: 0,  // seconds this computer's voice timing runs late (Practice → Timing calibration)
+  timingOffsetTyped: 0,  // the same for typing (Enter key)
   disorder: 'normal',
   cdrSide: 'left',
   metronome: 'on',

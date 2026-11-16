@@ -143,6 +143,15 @@ function updateRunHud(force) {
   const clock = t && t.limitSeconds ? formatClock(t.limitSeconds - run.elapsed) : formatClock(run.elapsed);
   const pct = v => v === null ? '–' : v + '%';
   let html = '<div class="row"><b>' + esc(def.title) + '</b><span class="clock">' + clock + '</span></div>';
+  // Timing calibration
+  if (def.calibrate) {
+    const n = Math.max(run.taps.voice.length, run.taps.typed.length);
+    html += '<div class="stats">Say <b>HARCH</b> (or type <b>harch</b> + Enter) each time the <b>RIGHT</b> heel strikes: the metronome needle on the R side. ' +
+            '<b>' + n + ' / ' + def.calibrate.taps + '</b></div><div class="bar"><i style="width:' + (100 * n / def.calibrate.taps) + '%"></i></div>' +
+            '<div class="stats">Current correction: voice ' + fmtOffset(settings.timingOffsetVoice) + ' · typing ' + fmtOffset(settings.timingOffsetTyped) + '</div>';
+    $('objective').innerHTML = html;
+    return;
+  }
   // Live missions: next checkpoint (distance + direction), progress, courtesy tally
   if (def.mode === 'Live') {
     const next = run.nextCheckpoint(), done = run.objectives.filter(o => o.done).length;
@@ -240,6 +249,7 @@ function showResults(res) {
                        'reported-out': 'Reported out' }[res.status] || res.status;
   if (res.debrief) { showFdeResults(res, statusText); return; }
   if (res.tanks) { showTanksResults(res); return; }
+  if (res.scenario === 'calibrate') { showCalibrationResults(res); return; }
   if (res.live) { showLiveResults(res, statusText); return; }
   let h = '<h2>' + esc(res.title) + '</h2><p class="sub">' + esc(res.mode) + ' · ' + statusText + ' · time ' + formatClock(res.elapsed) + '</p>';
   h += '<div class="tiles">' +
@@ -405,6 +415,33 @@ function showLiveResults(res, statusText) {
   $('resultsSheet').innerHTML = h;
   $('resultsMenu').onclick = () => openScene('Menu');
   $('resultsAgain').onclick = () => openScene('Campus');
+  showScreen('results');
+}
+
+// "+0.12 s (late)" for a timing correction
+function fmtOffset(v) { v = v || 0; return v === 0 ? 'none' : (v > 0 ? '+' : '−') + Math.abs(v).toFixed(2) + ' s'; }
+
+// Timing calibration result: save the correction for voice or typing
+function showCalibrationResults(res) {
+  const c = res.calibration;
+  let h = '<h2>Timing calibration</h2>';
+  if (!c) {
+    h += '<p class="sub">Not finished: give HARCH on the right heel 8 times. Nothing was changed.</p>';
+  } else {
+    const key = c.kind === 'voice' ? 'timingOffsetVoice' : 'timingOffsetTyped';
+    settings[key] = c.offset; saveSettings();
+    h += '<p class="sub">' + (c.kind === 'voice' ? 'Voice' : 'Typing') + ': your beats arrived on average <b>' + Math.abs(c.offset).toFixed(2) + ' s ' +
+         (c.offset >= 0 ? 'late' : 'early') + '</b>. From now on the game allows for this (saved on this computer).</p>';
+    h += '<p class="sub">Beats: ' + c.beats.map(b => (b >= 0 ? '+' : '−') + Math.abs(b).toFixed(2)).join(', ') + ' s</p>' +
+         '<p class="sub">Run it again any time (for example after changing microphone). The on-time window is ±' +
+         DRILL.disorder.timingGraceSeconds.toFixed(2) + ' s or more.</p>';
+  }
+  h += '<div class="sheet-actions"><button class="btn" id="calReset">Reset both corrections</button><button class="btn" id="resultsMenu">☰ Main menu</button>' +
+       '<button class="btn primary" id="resultsAgain">↻ Again</button></div>';
+  $('resultsSheet').innerHTML = h;
+  $('calReset').onclick = () => { settings.timingOffsetVoice = 0; settings.timingOffsetTyped = 0; saveSettings(); toast('Timing corrections reset to none', 'good'); };
+  $('resultsMenu').onclick = () => openScene('Menu');
+  $('resultsAgain').onclick = () => openScene('DrillPad');
   showScreen('results');
 }
 

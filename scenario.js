@@ -49,6 +49,26 @@ class ScenarioRun {
     this.planningLeft = def.planningSeconds || 0;
     this.reportedIn = !def.reportIn;
     this.reportedOut = false;
+    this.taps = { voice: [], typed: [] };      // timing calibration beats (seconds; + = late)
+  }
+
+  // TIMING CALIBRATION: one beat given (voice or Enter). Returns { good, message }.
+  calibrationTap(text, options) {
+    const f = this.flight, info = f.footInfo(), C = this.def.calibrate;
+    if (!info) return { good: 'warn', message: 'Wait until the flight is marking time.' };
+    const stepSec = f.stepSeconds;
+    const p = info.progress - ((options && options.ageSeconds) || 0) / stepSec;   // raw: no correction applied
+    const s = signedTimingAt(p, 'right');
+    if (Math.abs(s) > 0.45) return { good: false, message: 'That was nearer the LEFT heel. Give it as the RIGHT heel strikes (needle on the R side).' };
+    const kind = options && options.voice ? 'voice' : 'typed', list = this.taps[kind];
+    list.push(s * stepSec);
+    const late = s * stepSec;
+    if (list.length >= C.taps) {
+      const sorted = list.slice().sort((a, b) => a - b), mid = sorted[Math.floor(sorted.length / 2)];
+      this.calibration = { kind, offset: Math.max(-C.maxOffsetSec, Math.min(C.maxOffsetSec, Math.round(mid * 100) / 100)), beats: list.slice() };
+      this.end('complete');
+    }
+    return { good: true, message: 'Beat ' + list.length + ' / ' + C.taps + ': ' + Math.abs(late).toFixed(2) + ' s ' + (late >= 0 ? 'late' : 'early') };
   }
 
   setStage(stage) {
@@ -239,6 +259,7 @@ class ScenarioRun {
     };
     if (this.def.efficientOrder) res.debrief = this.debrief(res);
     if (this.extra) res.tanks = this.extra();   // mode-specific results (Tanks)
+    if (this.def.calibrate) res.calibration = this.calibration || null;
     if (this.def.mode === 'Live') res.live = this.liveScore(res);
     return res;
   }
@@ -298,6 +319,11 @@ function routeCommand(text, options) {
   if (courtesy) {
     const st = courtesy.statement(text);
     if (st) { flight.feedback((st.good === true ? '✔ ' : st.good ? '⚠ ' : '✘ ') + st.message, st.good); return null; }
+  }
+  if (run && run.def.calibrate) {                           // timing calibration: every beat counts
+    const st = run.calibrationTap(text, options);
+    flight.feedback((st.good === true ? '✔ ' : st.good ? '⚠ ' : '✘ ') + st.message, st.good);
+    return null;
   }
   if (run) {
     const st = run.statement(text);

@@ -27,7 +27,9 @@ const DRILL = {
   disorder: {
     maxDriftPx: 10,        // furthest a cadet can drift from their proper spot
     naturalDriftPx: 0.15,  // drift per step while marching, even with good commands
-    timingGrace: 0.2,      // within 0.2 of a step of the correct heel strike = on time
+    timingGrace: 0.2,      // within 0.2 of a step of the correct heel strike = on time...
+    timingGraceSeconds: 0.15, // ...but never stricter than +/-0.15 s (at 120 steps/min 0.2 step is only 0.1 s; user, 2026-11-15)
+    timingGraceMaxSteps: 0.35, // and never so loose that the wrong foot could pass
     badTimingDriftPx: 8,   // extra drift for a command given a full step off
     sloppyWordDriftPx: 3,  // extra drift per letter wrong in a command
     coverSpeedPx: 15,      // units/second cadets move back into place on COVER

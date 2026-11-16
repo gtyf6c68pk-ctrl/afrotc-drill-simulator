@@ -50,7 +50,21 @@ function isPreparatoryOnly(cleaned) {
 // as the command of execution, at least one step before it (normally two steps: same heel, next strike).
 //   prepStep / execStep: cadence positions when each part was said; foot: the command's foot
 // Returns null (fine) or { error, gap, text }.
-function prepTimingProblem(prepStep, execStep, foot) {
+// The "on time" window in steps for a step length of stepSec seconds (DRILL.disorder)
+function timingWindow(stepSec) {
+  const D = DRILL.disorder;
+  return Math.min(D.timingGraceMaxSteps, Math.max(D.timingGrace, D.timingGraceSeconds / stepSec));
+}
+
+// Signed distance (steps) from the nearest heel strike of `foot` (+ = after it, - = before it)
+function signedTimingAt(p, foot) {
+  if (foot === 'either') return p - Math.round(p);
+  const offset = foot === 'left' ? 1 : 0;
+  return p - (Math.round((p - offset) / 2) * 2 + offset);
+}
+
+function prepTimingProblem(prepStep, execStep, foot, grace) {
+  grace = grace || TIMING_GRACE;
   const P = DRILL.preparatory;
   const gap = execStep - prepStep;
   const round2 = v => Math.round(v * 100) / 100;
@@ -59,11 +73,11 @@ function prepTimingProblem(prepStep, execStep, foot) {
   }
   if (foot === 'either') {                         // Flight, HALT: both parts on the same heel (even gap)
     const error = Math.abs(gap - 2 * Math.round(gap / 2));
-    if (error <= 2 * TIMING_GRACE) return null;
+    if (error <= 2 * grace) return null;
     return { error: round2(error), gap: round2(gap), text: 'give "Flight" and HALT on the SAME foot: "Flight" as a heel strikes, HALT when that heel strikes again (DAFPAM 3.9.2)' };
   }
   const error = timingErrorAt(prepStep, foot);
-  if (error <= TIMING_GRACE) return null;
+  if (error <= grace) return null;
   return { error: round2(error), gap: round2(gap),
            text: 'preparatory command ' + (error > 0.5 ? 'on the WRONG foot' : 'a little off the heel strike') +
                  '; give it as the ' + foot.toUpperCase() + ' heel strikes, two steps before the command of execution (DAFPAM 3.9.2)' };
@@ -515,13 +529,21 @@ class FlightLogic {
     return timingErrorAt(info.progress - ageSeconds / (this.doubleTime ? this.doubleStepSeconds : this.stepSeconds), foot);
   }
 
-  // The problems (and extra drift) for a timing error, as used in feedback messages
-  timingProblem(timing, foot) {
-    if (timing <= TIMING_GRACE) return null;
-    const drift = (timing - TIMING_GRACE) / (1 - TIMING_GRACE) * BAD_TIMING_DRIFT;
-    if (foot === 'either') return { drift, text: 'given between steps; give it as a heel strikes' };
+  // The "on time" window (steps) at the current cadence, and this computer's measured delay
+  grace() { return timingWindow(this.doubleTime ? this.doubleStepSeconds : this.stepSeconds); }
+  timingBias(voice) { const o = this.opts.timingOffset; return o ? (voice ? o.voice : o.typed) || 0 : 0; }
+
+  // The problems (and extra drift) for a timing error, as used in feedback messages.
+  //   signedSec (optional): how early (-) or late (+) it was, in seconds, shown in the message
+  timingProblem(timing, foot, signedSec) {
+    const grace = this.grace();
+    if (timing <= grace) return null;
+    const drift = (timing - grace) / (1 - grace) * BAD_TIMING_DRIFT;
+    const by = signedSec === undefined || timing > 0.5 ? '' :
+      ' (' + Math.abs(signedSec).toFixed(2) + ' s ' + (signedSec > 0 ? 'late' : 'early') + ')';
+    if (foot === 'either') return { drift, text: 'given between steps; give it as a heel strikes' + by };
     if (timing > 0.5) return { drift, text: 'given on the WRONG foot; it belongs on the ' + foot.toUpperCase() + ' foot' };
-    return { drift, text: 'a little off the ' + foot.toUpperCase() + ' heel strike' };
+    return { drift, text: 'a little off the ' + foot.toUpperCase() + ' heel strike' + by };
   }
 
   // Spoken commands (offline recognizer): the command was carried out right away using an
@@ -531,15 +553,18 @@ class FlightLogic {
   //   prepAgeAtGive (optional): the same for the last word of the preparatory command
   judgeTiming(handle, ageAtGive, prepAgeAtGive) {
     if (!handle) return;
+    const bias = this.timingBias(true);                          // this computer's measured voice delay
+    ageAtGive += bias;
+    if (prepAgeAtGive !== undefined && prepAgeAtGive !== null) prepAgeAtGive += bias;
     const exactStep = handle.stepAtGive - ageAtGive / handle.stepSec;
     if (handle.pending && this.pending === handle.pending) {
       this.pending.at = Math.max(Math.round(exactStep) + handle.pendingOffset, this.realSteps());
     }
     if (!handle.foot) return;
     const error = timingErrorAt(exactStep, handle.foot);
-    const problem = this.timingProblem(error, handle.foot);
+    const problem = this.timingProblem(error, handle.foot, signedTimingAt(exactStep, handle.foot) * handle.stepSec);
     const prepStep = prepAgeAtGive !== undefined && prepAgeAtGive !== null ? handle.stepAtGive - prepAgeAtGive / handle.stepSec : null;
-    const prep = prepStep !== null ? prepTimingProblem(prepStep, exactStep, handle.foot) : null;
+    const prep = prepStep !== null ? prepTimingProblem(prepStep, exactStep, handle.foot, this.grace()) : null;
     this.log('timing-graded', { commandId: handle.id, name: handle.name, foot: handle.foot,
                                 timingError: Math.round(error * 100) / 100, problem: problem ? problem.text : null,
                                 prepGiven: prepStep !== null, prepProblem: prep ? prep.text : null,
@@ -1146,6 +1171,12 @@ class FlightLogic {
   // ---------- Giving a command ----------
   // options: { voice: true, ageSeconds } for spoken commands (see voice.js)
   giveCommand(text, options = {}) {
+    // Correct for this computer's measured delay (Practice → Timing calibration)
+    const bias = this.timingBias(options.voice);
+    if (bias) {
+      options = Object.assign({}, options, { ageSeconds: (options.ageSeconds || 0) + bias });
+      if (options.prepAgeSeconds !== undefined && options.prepAgeSeconds !== null) options.prepAgeSeconds += bias;
+    }
     let cleaned = cleanUpCommand(text, options.voice);
     if (!cleaned) return;
     const stepSecNow = this.doubleTime ? this.doubleStepSeconds : this.stepSeconds;
@@ -1253,7 +1284,8 @@ class FlightLogic {
     const timing = this.timingError(foot, options.ageSeconds || 0);
     const stepSec = this.doubleTime ? this.doubleStepSeconds : this.stepSeconds;
     const execStep = saidStep(options.ageSeconds);
-    const prepIssue = foot && prepStep !== null && !options.deferTiming ? prepTimingProblem(prepStep, execStep, foot) : null;
+    const prepIssue = foot && prepStep !== null && !options.deferTiming ? prepTimingProblem(prepStep, execStep, foot, this.grace()) : null;
+    const signedSec = foot && execStep !== null ? signedTimingAt(execStep, foot) * stepSec : null;
     this.commandAt = this.realSteps() - (options.ageSeconds || 0) / stepSec;   // when it was really given
 
     this.finishGuideMove();
@@ -1272,7 +1304,7 @@ class FlightLogic {
     const name = result.slice(3);
     const problems = [];
     let drift = 0;
-    const timingIssue = options.deferTiming ? null : this.timingProblem(timing, foot);
+    const timingIssue = options.deferTiming ? null : this.timingProblem(timing, foot, signedSec === null ? undefined : signedSec);
     if (timingIssue) { drift += timingIssue.drift; problems.push(timingIssue.text); }
     if (wrongLetters > 0) {
       drift += wrongLetters * SLOPPY_WORD_DRIFT;
@@ -1289,6 +1321,7 @@ class FlightLogic {
     this.log('command', { id, text, key: cmd.key, name: cmd.say, action: cmd.action, voice: !!options.voice,
                           foot, timingError: options.deferTiming ? null : Math.round(timing * 100) / 100,
                           timingProblem: timingIssue ? timingIssue.text : null,
+                          timingOffsetSec: signedSec === null ? null : Math.round(signedSec * 1000) / 1000,
                           prepGiven: prepStep !== null, prepProblem: prepIssue ? prepIssue.text : null,
                           prepGap: prepStep !== null && execStep !== null ? Math.round((execStep - prepStep) * 100) / 100 : null,
                           wrongLetters, problems, deferredTiming: !!options.deferTiming,

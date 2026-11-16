@@ -13,6 +13,16 @@ const SCENARIOS = {
     blurb: 'Any command, any order. The coach explains each mistake. Finish to see your grades.',
   },
 
+  // TIMING CALIBRATION (user, 2026-11-15: "on time every time but still docked"): the flight marks time;
+  // the cadet says HARCH (or types harch + Enter) each time the RIGHT heel strikes. The middle value of
+  // the measured offsets = this computer's delay (microphone / keyboard / screen + habit) for that input,
+  // saved in Settings and subtracted from then on. Voice and typing are calibrated separately.
+  calibrate: {
+    id: 'calibrate', title: 'Timing calibration', mode: 'Practice', map: 'DrillPad', hints: false,
+    timer: null, objectives: [], calibrate: { taps: 8, maxOffsetSec: 0.35 },
+    blurb: 'Takes 20 seconds: say HARCH (or press Enter) on the right heel 8 times so the game can allow for your computer\'s delay.',
+  },
+
   // AFROTCI 36-2011 Vol 1, drill performance measure: "execute a 30-command drill sequence without error".
   sequence30: {
     id: 'sequence30', title: '30-command challenge', mode: 'Practice', map: 'DrillPad', hints: true,

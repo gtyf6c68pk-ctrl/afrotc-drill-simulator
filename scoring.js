@@ -12,9 +12,10 @@
 
 const SCORING = {
   // Timing words for a timing error (0 = exactly on the heel strike, 1 = a whole step off)
-  timingGrade(error, foot) {
+  // problem: the flight's verdict (null = on time; the window depends on the cadence)
+  timingGrade(error, foot, problem) {
     if (error === null || error === undefined || !foot) return 'n/a';
-    if (error <= DRILL.disorder.timingGrace) return 'ok';
+    if (!problem) return 'ok';
     return foot !== 'either' && error > 0.5 ? 'wrong-foot' : 'off';
   },
 
@@ -27,7 +28,7 @@ const SCORING = {
           id: e.id, time: e.time, step: e.step, text: e.text, key: e.key, name: e.name, action: e.action,
           voice: e.voice, foot: e.foot, executed: true, reason: null,
           wording: e.wrongLetters > 0 ? 'sloppy' : 'ok',
-          timingError: e.timingError, timing: e.deferredTiming ? 'pending' : SCORING.timingGrade(e.timingError, e.foot),
+          timingError: e.timingError, timing: e.deferredTiming ? 'pending' : SCORING.timingGrade(e.timingError, e.foot, e.timingProblem),
           timingProblem: e.timingProblem || null,
           prep: !e.foot ? 'n/a' : !e.prepGiven ? 'not-graded' : e.prepProblem ? 'off' : 'ok',
           prepProblem: e.prepProblem || null, prepGap: e.prepGap,
@@ -37,7 +38,7 @@ const SCORING = {
       } else if (e.type === 'timing-graded' && byId[e.commandId]) {
         const r = byId[e.commandId];             // voice: exact timing arrives a moment later
         r.timingError = e.timingError;
-        r.timing = SCORING.timingGrade(e.timingError, e.foot);
+        r.timing = SCORING.timingGrade(e.timingError, e.foot, e.problem);
         r.timingProblem = e.problem;
         if (e.prepGiven) { r.prep = e.prepProblem ? 'off' : 'ok'; r.prepProblem = e.prepProblem; r.prepGap = e.prepGap; }
       } else if (e.type === 'command-rejected') {

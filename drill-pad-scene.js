@@ -47,9 +47,11 @@ class DrillPadScene extends Phaser.Scene {
       elementSize,
       cdrSide: settings.cdrSide,
       coverAfterHalt: !(def.rules && def.rules.coverAfterHalt === false),   // FDE: COVER only has to be given once
+      timingOffset: { voice: settings.timingOffsetVoice || 0, typed: settings.timingOffsetTyped || 0 },   // calibration
       disorder: DISORDER_LEVELS[settings.disorder],
     });
     this.flightView = new FlightView(this, this.flight);
+    if (def.calibrate) this.flight.giveCommand('Mark Time, HARCH');   // calibration: the flight marks time in place
     setActiveFlight(this.flight);
     activeScene = this;
     this.events.once('shutdown', () => { setActiveFlight(null); activeCamera = null; activeRun = null; activeScene = null; });
