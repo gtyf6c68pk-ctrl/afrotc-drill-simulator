@@ -195,6 +195,7 @@
       <div class="menu-actions">
         <button class="btn" id="menuSettings">⚙ Settings</button>
         <button class="btn" id="menuCommands">? Command reference</button>
+        <button class="btn" id="menuStats">📈 My stats</button>
       </div>
       <div class="fineprint">Drill per DAFPAM 34-1203 and AFROTCI 36-2011 Vol 1. All names in the game are fictional.
         Map data © OpenStreetMap contributors · Tiles: Kenney.nl · Full credits in CREDITS.md</div>
@@ -217,6 +218,11 @@
   <!-- ===== Results / debrief (built by showResults in ui.js) ===== -->
   <div id="screen-results" class="screen hidden">
     <div class="sheet panel" id="resultsSheet"></div>
+  </div>
+
+  <!-- ===== My stats (built by showStats in ui.js from stats.js; saved on this device only) ===== -->
+  <div id="screen-stats" class="screen hidden">
+    <div class="sheet panel" id="statsSheet"></div>
   </div>
 
   <!-- ===== Live mission briefing (built by showBriefing in ui.js) ===== -->
@@ -313,6 +319,7 @@
   <script src="scoring.js"></script>
   <script src="scenario.js"></script>
   <script src="scenarios.js"></script>
+  <script src="stats.js"></script>
   <script src="flight-view.js"></script>
   <script src="metronome.js"></script>
   <script src="ui.js"></script>

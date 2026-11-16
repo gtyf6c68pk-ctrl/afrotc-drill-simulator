@@ -14,8 +14,8 @@ function startGame() {
     scene: [MenuScene, DrillPadScene, CampusScene],   // the first one (Menu) opens first
   });
   wireUi();
-  if (LINK.scene === 'Settings' || LINK.scene === 'Reference') {     // HTML screens (no map)
-    const name = LINK.scene.toLowerCase(); LINK.scene = null; setTimeout(() => showScreen(name), 50);
+  if (LINK.scene === 'Settings' || LINK.scene === 'Reference' || LINK.scene === 'Stats') {     // HTML screens (no map)
+    const name = LINK.scene.toLowerCase(); LINK.scene = null; setTimeout(() => name === 'stats' ? showStats() : showScreen(name), 50);
   }
 }
 

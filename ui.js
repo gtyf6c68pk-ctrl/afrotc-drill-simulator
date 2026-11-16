@@ -67,6 +67,7 @@ function showScreen(name) {
   $('screen-results').classList.toggle('hidden', name !== 'results');
   $('screen-reference').classList.toggle('hidden', name !== 'reference');
   $('screen-briefing').classList.toggle('hidden', name !== 'briefing');
+  $('screen-stats').classList.toggle('hidden', name !== 'stats');
   $('hud').classList.toggle('hidden', name !== 'play');
   if (name !== 'play') { $('minimapFrame').classList.add('hidden'); $('reference').classList.add('closed'); }
   if (name === 'settings') buildSettings();
@@ -230,6 +231,7 @@ const esc = t => String(t === null || t === undefined ? '' : t).replace(/&/g, '&
 // The results / debrief screen
 function showResults(res) {
   lastResults = res;
+  if (!res._saved) { res._saved = true; STATS.record(res); }   // My stats (this device only)
   const s = res.summary;
   const pct = v => v === null ? '–' : v + '%';
   const tile = (v, l, cls) => '<div class="tile ' + (cls || '') + '"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>';
@@ -306,6 +308,56 @@ function showFdeResults(res, statusText) {
   $('resultsMenu').onclick = () => openScene('Menu');
   $('resultsAgain').onclick = () => openScene('DrillPad');
   showScreen('results');
+}
+
+// My stats: progress over time, best per mode, accuracy by command (stats.js; this device only)
+function showStats() {
+  const o = STATS.overview(), t = o.totals;
+  const tile = (v, l, cls) => '<div class="tile ' + (cls || '') + '"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>';
+  const pct = v => v === null || v === undefined ? '–' : v + '%';
+  let h = '<h2>My stats</h2><p class="sub">Saved in this browser on this computer only. No name or account.</p>';
+  if (!t.sessions) {
+    h += '<p class="sub">No sessions yet. Finish a Practice, FDE, Tanks or Live session and its results appear here.</p>';
+  } else {
+    h += '<div class="tiles">' + tile(t.sessions, 'sessions') + tile(t.commands, 'commands given') +
+         tile(pct(t.accuracy), 'commands without a mistake', t.accuracy >= 90 ? 'good' : t.accuracy >= 70 ? 'warn' : 'bad') +
+         tile(Math.round(t.seconds / 60) + ' min', 'time drilling') + '</div>';
+    if (o.trend.length >= 2) {                           // accuracy over the last sessions, as a small line chart
+      const W = 820, H = 120, n = o.trend.length;
+      const pts = (k) => o.trend.map((e, i) => (i * (W - 20) / (n - 1) + 10).toFixed(1) + ',' + (H - 10 - (e[k] || 0) * (H - 20) / 100).toFixed(1)).join(' ');
+      h += '<h3>Progress (last ' + n + ' sessions)</h3><svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;background:#1a232e;border-radius:6px">' +
+           [25, 50, 75, 100].map(v => '<line x1="10" x2="' + (W - 10) + '" y1="' + (H - 10 - v * (H - 20) / 100) + '" y2="' + (H - 10 - v * (H - 20) / 100) +
+             '" stroke="rgba(255,255,255,0.08)"/>').join('') +
+           '<polyline fill="none" stroke="#6be38a" stroke-width="3" points="' + pts('accuracy') + '"/>' +
+           '<polyline fill="none" stroke="#4fa3ff" stroke-width="2" stroke-dasharray="6 5" points="' + pts('onTime') + '"/></svg>' +
+           '<p class="sub"><span class="ok">━</span> without a mistake &nbsp; <span style="color:var(--accent)">╍</span> on the correct heel</p>';
+    }
+    if (o.best.length) h += '<h3>Best results</h3><table class="list"><tr><th>Mode</th><th>Record</th><th>Value</th><th>Date</th></tr>' +
+      o.best.map(b => '<tr><td>' + esc(b.mode) + '</td><td>' + esc(b.label) + '</td><td><b>' + esc(b.label.includes('(s)') ? formatClock(b.value) : b.value) +
+        '</b></td><td class="na">' + esc(b.date.slice(0, 10)) + '</td></tr>').join('') + '</table>';
+    if (o.mostMissed.length) h += '<h3>Most-missed commands</h3>' + o.mostMissed.map(c => {
+      const why = [c.wrongFoot && c.wrongFoot + ' wrong foot', c.off && c.off + ' off the beat', c.prepOff && c.prepOff + ' preparatory off',
+                   c.sloppy && c.sloppy + ' sloppy wording', c.refused && c.refused + ' refused'].filter(Boolean).join(', ');
+      const cmd = COMMANDS_BY_KEY[c.key];
+      return '<div class="mistake"><b>' + esc(c.name) + '</b> — ' + c.mistakes + ' of ' + c.given + ' (' + esc(why) + ')' +
+             (cmd ? '<div class="fix">✔ ' + esc(SCORING.howTo(cmd)) + '</div>' : '') + '</div>';
+    }).join('');
+    h += '<details><summary>Accuracy by command (' + o.byCommand.length + ')</summary><table class="list"><tr><th>Command</th><th>Given</th>' +
+         '<th>Without a mistake</th><th>Wrong foot</th><th>Refused</th></tr>' + o.byCommand.map(c => '<tr><td>' + esc(c.name) + '</td><td>' + c.given +
+         '</td><td class="' + (c.accuracy >= 90 ? 'ok' : c.accuracy >= 70 ? 'meh' : 'no') + '">' + pct(c.accuracy) + '</td><td>' + c.wrongFoot +
+         '</td><td>' + c.refused + '</td></tr>').join('') + '</table></details>';
+    h += '<details><summary>Recent sessions</summary><table class="list"><tr><th>Date</th><th>Mode</th><th>Session</th><th>Commands</th><th>Result</th></tr>' +
+         o.recent.map(e => '<tr><td class="na">' + esc(e.date.slice(0, 16).replace('T', ' ')) + '</td><td>' + esc(e.mode) + '</td><td>' + esc(e.title) +
+           '</td><td>' + e.given + '</td><td>' + esc(e.liveScore !== undefined && e.liveScore !== null ? 'score ' + e.liveScore :
+             e.fdeMovements !== undefined ? e.fdeMovements + '/20 in ' + formatClock(e.seconds) : e.tanksScore !== undefined ? e.tanksScore + ' flanked' :
+             pct(e.accuracy) + ' clean') + '</td></tr>').join('') + '</table></details>';
+  }
+  h += '<div class="sheet-actions">' + (t.sessions ? '<button class="btn" id="statsClear">Delete my stats</button>' : '') +
+       '<button class="btn primary" id="statsBack">◀ Back</button></div>';
+  $('statsSheet').innerHTML = h;
+  $('statsBack').onclick = () => showScreen('menu');
+  if ($('statsClear')) $('statsClear').onclick = () => { if (confirm('Delete all saved stats on this computer?')) { STATS.clear(); showStats(); } };
+  showScreen('stats');
 }
 
 // Live mission briefing (before the flight steps off)
@@ -555,6 +607,7 @@ function wireUi() {
   $('menuSettings').onclick = () => showScreen('settings');
   $('menuCommands').onclick = () => showScreen('reference');
   $('referenceBack').onclick = () => showScreen('menu');
+  $('menuStats').onclick = () => showStats();
   $('btnFinish').onclick = () => { if (activeRun) activeRun.finish(); };
   $('btnTurn').onclick = () => { if (planningTurn) planningTurn(); };
   $('settingsBack').onclick = () => showScreen('menu');
@@ -582,6 +635,7 @@ function wireUi() {
     if (e.key !== 'Escape') return;
     if (!$('hud').classList.contains('hidden') || !$('screen-results').classList.contains('hidden') ||
         !$('screen-briefing').classList.contains('hidden')) openScene('Menu');
-    else if (!$('screen-settings').classList.contains('hidden') || !$('screen-reference').classList.contains('hidden')) showScreen('menu');
+    else if (!$('screen-settings').classList.contains('hidden') || !$('screen-reference').classList.contains('hidden') ||
+             !$('screen-stats').classList.contains('hidden')) showScreen('menu');
   });
 }

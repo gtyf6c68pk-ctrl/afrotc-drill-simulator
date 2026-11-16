@@ -8,7 +8,7 @@ class MenuScene extends Phaser.Scene {
 
   create() {
     // A link straight to a screen (see LINK in ui.js) skips the menu once
-    if (LINK.scene && !['Menu', 'Settings', 'Reference'].includes(LINK.scene)) {
+    if (LINK.scene && !['Menu', 'Settings', 'Reference', 'Stats'].includes(LINK.scene)) {
       const s = LINK.scene; LINK.scene = null; this.scene.start(s); return;
     }
     setActiveFlight(null);
