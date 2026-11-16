@@ -55,7 +55,7 @@ class DrillPadScene extends Phaser.Scene {
     this.events.once('shutdown', () => { setActiveFlight(null); activeCamera = null; activeRun = null; activeScene = null; });
 
     setHud({ mode: esc(def.mode) + ' · <b>' + esc(def.title) + '</b>',
-             attribution: (area ? 'Cones mark the 40 ft x 40 ft drill area' : 'Drill pad') +
+             attribution: (area ? 'Cones mark the ' + P.area * 2 + ' ft x ' + P.area * 2 + ' ft drill area' : 'Drill pad') +
                           ' · each faint square = 5 steps · North is up · Tiles: Kenney.nl' });
     this.run = startRun(def, this.flight);
     this.run.area = area;
