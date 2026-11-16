@@ -736,6 +736,17 @@ class FlightLogic {
   }
 
   cmdFlank(cmd) {
+    // From the halt (tester / detachment practice; DAFPAM 3.17 only describes it marching):
+    // face 90 degrees and step off in the new direction
+    if (!this.marching && cmd.action === 'flank') {
+      if (this.columnMovementInProgress()) return 'Finish the column movement first.';
+      const atFront = this.commanderAtFrontOfLine();
+      this.marchers().forEach(p => { p.dir = turnDir(p.dir, cmd.turn); });
+      this.relocateGuideIfNeeded();
+      this.commanderStaysOnSide(atFront);
+      this.startMarching();
+      return 'OK:' + cmd.say + ' (face and step off)';
+    }
     if (!this.marching) return cmd.label + ' is given while marching.';
     if (this.halfStep) return cmd.label + ' is not given while half stepping. Command Forward, HARCH first.';
     if (this.columnMovementInProgress()) return 'Wait until the whole flight has finished the column movement.';
@@ -829,19 +840,37 @@ class FlightLogic {
 
     // Outer files pivot a little further forward so the interval stays the same after the
     // turn: sideways distance x tan(half the turn angle) (= sideways for 90, x 0.414 for 45).
+    // Column Right/Left (90 degrees, DAFPAM 4.11.1): the base file pivots 90 degrees after one more
+    // step; every OTHER file takes one step, pivots 45 degrees, marches on the diagonal (further for
+    // files further out: DAFPAM's 2 / 4 / 6 steps), pivots 45 degrees again, and marches up until
+    // even with the file beside it (a cascading line), then everyone half steps.
+    // Column Half Right/Left and inclines: one pivot, outer files a little further forward.
+    const twoStage = !incline && Math.abs(quarterTurns) === 1;
     const lead = Math.tan(Math.abs(quarterTurns) * Math.PI / 4);
     const plans = files.map((f, k) => {
       const sideways = Math.abs(fileB[k] - fileB[base]);
-      const pivot = toXY(baseFront + sideways * lead, fileB[k], h);
-      pivot.dir = newDir;
-      const toPivot = aOf(pivot, h) - aOf(f[0], h);
-      const along = aOf(pivot, newDir) - toPivot;   // where this file ends up along the new direction
-      return { f, pivot, along };
+      let turns, along;
+      if (twoStage && sideways > 1) {
+        const mid = turnDir(h, quarterTurns / 2);
+        const p1 = toXY(baseFront, fileB[k], h); p1.dir = mid;
+        const diag = sideways * Math.SQRT2;                     // lands exactly one interval per file out
+        const p2 = { x: p1.x + DIRS[mid].x * diag, y: p1.y + DIRS[mid].y * diag, dir: newDir };
+        const toPivot = aOf(p1, h) - aOf(f[0], h);
+        turns = [p1, p2];
+        along = aOf(p2, newDir) - toPivot - diag;               // where this file ends up along the new direction
+      } else {
+        const pivot = toXY(baseFront + sideways * lead, fileB[k], h);
+        pivot.dir = newDir;
+        const toPivot = aOf(pivot, h) - aOf(f[0], h);
+        turns = [pivot];
+        along = aOf(pivot, newDir) - toPivot;
+      }
+      return { f, turns, along };
     });
     const furthestBack = Math.min(...plans.map(p => p.along));
-    plans.forEach(({ f, pivot, along }) => {
+    plans.forEach(({ f, turns, along }) => {
       const group = { remaining: along - furthestBack };  // distance to make up by half stepping
-      f.forEach(p => { p.turns.push({ ...pivot }); p.group = group; });
+      f.forEach(p => { turns.forEach(t => p.turns.push({ ...t })); p.group = group; });
     });
 
     this.startMarching();
@@ -1049,14 +1078,14 @@ class FlightLogic {
     return 'OK:' + cmd.say;
   }
 
-  // Pre-sent, HARMS / Or-der, HARMS (3.7): first and second count of the hand salute, at the halt
+  // Present, HARMS / Order, HARMS (3.7): first and second count of the hand salute, at the halt
   cmdPresentArms(cmd) {
     if (this.marching) return 'Present Arms is given at the halt. Halt the flight first.';
     this.posture = 'presentArms';
     return 'OK:' + cmd.say;
   }
   cmdOrderArms(cmd) {
-    if (this.posture !== 'presentArms') return 'Or-der, HARMS follows Pre-sent, HARMS (DAFPAM 3.7).';
+    if (this.posture !== 'presentArms') return 'Order, HARMS follows Present, HARMS (DAFPAM 3.7).';
     this.posture = 'attention';
     return 'OK:' + cmd.say;
   }
@@ -1203,7 +1232,7 @@ class FlightLogic {
       return;
     }
     if (this.posture === 'presentArms' && cmd.action !== 'orderArms') {
-      this.reject(text, cmd.key, 'The flight is at present arms. Command Or-der, HARMS first (DAFPAM 3.7).');
+      this.reject(text, cmd.key, 'The flight is at present arms. Command Order, HARMS first (DAFPAM 3.7).');
       return;
     }
     if (this.markTime && !cmd.markTimeOk) {
@@ -1368,18 +1397,21 @@ class FlightLogic {
       });
     }
 
-    // COVER: small choppy steps back into the proper spot
-    if (this.covering) {
+    // COVER: small choppy steps back into the proper spot. While half stepping the cadets
+    // re-establish dress and cover on their own, more slowly (tester's note, 2026-11-15).
+    const autoCover = this.marching && this.halfStep && !this.covering && !this.columnMovementInProgress();
+    if (this.covering || autoCover) {
       let done = true;
+      const speed = this.covering ? COVER_SPEED : COVER_SPEED * DRILL.disorder.halfStepCoverRate;
       this.members().forEach(p => {
         const d = Math.hypot(p.off.x, p.off.y);
-        const move = COVER_SPEED * dt;
+        const move = speed * dt;
         if (d <= move) { p.off.x = 0; p.off.y = 0; }
         else { p.off.x -= p.off.x / d * move; p.off.y -= p.off.y / d * move; done = false; }
         p.rot = Math.abs(p.rot) <= dt ? 0 : p.rot - Math.sign(p.rot) * dt;
         if (p.rot !== 0) done = false;
       });
-      if (done) this.covering = false;
+      if (done && this.covering) this.covering = false;
     }
 
     // Side steps at the halt (Close/Extend, HARCH): 12-inch steps in cadence

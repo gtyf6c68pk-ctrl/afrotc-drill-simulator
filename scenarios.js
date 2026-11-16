@@ -56,7 +56,7 @@ const SCENARIOS = {
     // to leave mark time / half step). Checked by tests/fde.test.js: all 20 count, the flight stays inside
     // the cones from the start spot above, well under 5:00 at 60 or 120 steps/min.
     efficientOrder: [
-      'Parade, HEST', 'Flight, Ten-HUT', 'Pre-sent, HARMS', 'Or-der, HARMS', 'Right, HACE', 'Left, HACE',
+      'Parade, HEST', 'Flight, Ten-HUT', 'Present, HARMS', 'Order, HARMS', 'Right, HACE', 'Left, HACE',
       'Right Step, HARCH', 'Flight, HALT', 'COVER', 'Left Step, HARCH', 'Flight, HALT', 'COVER', 'A-bout, HACE',
       'To the Rear, HARCH', 'Change Step, HARCH', 'Left Flank, HARCH', 'Right Flank, HARCH', 'Column Right, HARCH',
       'Mark Time, HARCH', 'Forward, HARCH', 'Half Step, HARCH', 'Forward, HARCH', 'Column Left, HARCH',

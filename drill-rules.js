@@ -31,6 +31,7 @@ const DRILL = {
     badTimingDriftPx: 8,   // extra drift for a command given a full step off
     sloppyWordDriftPx: 3,  // extra drift per letter wrong in a command
     coverSpeedPx: 15,      // units/second cadets move back into place on COVER
+    halfStepCoverRate: 0.4, // while half stepping they straighten out on their own at this fraction of COVER speed (tester)
     stairsDriftPx: 6,      // marching onto stairs at attention instead of route step (user's rule)
   },
 
@@ -82,8 +83,8 @@ const DRILL = {
     [/\b(ah|a|at|uh) ten (chut|hut|shut)\b/g, 'ten hut'],   // "Ah-Ten-CHUT" (user's recording)
     [/\batten (chut|hut)\b/g, 'ten hut'],
     [/\bparade (rest|hest)\b/g, 'parade hest'],   // Parade, REST (DAFPAM) / Parade, HEST (user's inflection)
-    [/\bpre sent\b/g, 'present'],                  // "Pre-sent, HARMS" (chart)
-    [/\bor der\b/g, 'order'],                      // "Or-der, HARMS" (chart)
+    [/\bpre sent\b/g, 'present'],                  // "Pre-sent" (chart) = Present, HARMS
+    [/\bor der\b/g, 'order'],                      // "Or-der" (chart) = Order, HARMS
     [/\broad ?guard (out|in)\b/g, 'road guards $1'],
     [/\broadguards\b/g, 'road guards'],
     [/\bhalfright\b/g, 'half right'],
@@ -121,7 +122,7 @@ const DRILL = {
     { word: 'march',     fix: 'Use the command voice: HARCH, not MARCH (e.g. Forward, HARCH).' },
     { word: 'face',      fix: 'Use the command voice: HACE, not FACE (e.g. Right, HACE).' },
     { word: 'attention', fix: 'Use the command voice: Flight, Ten-HUT, not ATTENTION.' },
-    { word: 'arms',      fix: 'Use the command voice: HARMS, not ARMS (e.g. Pre-sent, HARMS).' },
+    { word: 'arms',      fix: 'Use the command voice: HARMS, not ARMS (e.g. Present, HARMS).' },
   ],
 
   // ---------- The commands ----------
@@ -151,9 +152,9 @@ const DRILL = {
       action: 'facing', turn: -1, ref: '3.4.1' },
     { key: 'about hace', say: 'A-bout, HACE', label: 'About Face', foot: null, when: 'halt',
       action: 'facing', turn: 2, ref: '3.4.2' },
-    { key: 'right flank harch', say: 'Right Flank, HARCH', label: 'Right Flank', foot: 'right', when: 'marching',
+    { key: 'right flank harch', say: 'Right Flank, HARCH', label: 'Right Flank', foot: 'right', when: 'both',
       action: 'flank', turn: 1, ref: '3.17' },
-    { key: 'left flank harch', say: 'Left Flank, HARCH', label: 'Left Flank', foot: 'left', when: 'marching',
+    { key: 'left flank harch', say: 'Left Flank, HARCH', label: 'Left Flank', foot: 'left', when: 'both',
       action: 'flank', turn: -1, ref: '3.17' },
     // To the Rear from the HALT: the flight faces about and steps off (user's detachment practice,
     // 2026-11-15; DAFPAM 3.16 only describes it while marching).
@@ -201,9 +202,9 @@ const DRILL = {
     // "Parade, HEST": the user's recorded inflection (DAFPAM 3.3.1.1 writes Parade, REST; both are accepted typed).
     { key: 'parade hest', say: 'Parade, HEST', label: 'Parade Rest', foot: null, when: 'halt',
       action: 'paradeRest', note: 'only from attention at the halt; Flight, Ten-HUT to return to attention', ref: '3.3.1.1' },
-    { key: 'present harms', say: 'Pre-sent, HARMS', label: 'Present Arms', foot: null, when: 'halt',
+    { key: 'present harms', say: 'Present, HARMS', label: 'Present Arms', foot: null, when: 'halt',
       action: 'presentArms', note: 'first count of the hand salute; nothing else until Order, HARMS', ref: '3.7' },
-    { key: 'order harms', say: 'Or-der, HARMS', label: 'Order Arms', foot: null, when: 'halt',
+    { key: 'order harms', say: 'Order, HARMS', label: 'Order Arms', foot: null, when: 'halt',
       action: 'orderArms', note: 'second count of the hand salute (after Present, HARMS)', ref: '3.7' },
     { key: 'close harch', say: 'Close, HARCH', label: 'Close, HARCH', foot: 'right', when: 'both',
       action: 'interval', close: true, note: 'close interval; the right element stands fast (at the halt) or half steps (marching)', ref: '4.10' },

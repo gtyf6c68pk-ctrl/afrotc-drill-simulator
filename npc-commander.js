@@ -460,12 +460,17 @@ class NpcCommander {
     const mine = f.everyone();
     const front = Math.max(...mine.map(p => p.x * h.x + p.y * h.y));
     const lats = mine.map(p => p.x * r.x + p.y * r.y);
-    const lo = Math.min(...lats) - 30, hi = Math.max(...lats) + 30;
+    const lo = Math.min(...lats) - 45, hi = Math.max(...lats) + 45;   // room for the outer files swinging wide in a wheel
     for (const other of this.opts.others()) {
       if (other === f || (this.opts.ignore && this.opts.ignore(other))) continue;
+      // where they are now, and where a marching flight will be ~3 steps from now (cross traffic)
+      const v = other.marching && !other.markTime ? DIRS[other.mainDir()] : null;
       for (const q of other.everyone()) {
-        const along = q.x * h.x + q.y * h.y - front, lat = q.x * r.x + q.y * r.y;
-        if (along > -10 && along < this.opts.lookAheadPx && lat > lo && lat < hi) { this.blockDist = along; return other; }
+        for (const ahead of v ? [0, 120] : [0]) {
+          const qx = q.x + (v ? v.x * ahead : 0), qy = q.y + (v ? v.y * ahead : 0);
+          const along = qx * h.x + qy * h.y - front, lat = qx * r.x + qy * r.y;
+          if (along > -10 && along < this.opts.lookAheadPx && lat > lo && lat < hi) { this.blockDist = along; return other; }
+        }
       }
     }
     return null;
@@ -660,7 +665,7 @@ class NpcCommander {
       const text = this.turnCommand(delta, false);
       if (text) {
         const r = DIRS[turnDir(N.dir, 1)], off = (N.x1 - c.x) * r.x + (N.y1 - c.y) * r.y;
-        this.nearCorner = Math.abs(off - this.turns[text]) < 6 * STEP_PX;
+        this.nearCorner = Math.abs(off - this.turns[text]) < 12 * STEP_PX;   // wait well short of a busy junction
       }
       if (text && strike && this.timeToTurn(c, text, N.dir, N)) {
         if (this.tryGive(text, strike)) { this.legs.shift(); this.correcting = false; }
