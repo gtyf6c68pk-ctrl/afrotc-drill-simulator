@@ -61,7 +61,7 @@
     .card-actions .btn { text-align: left; font-size: 13px; }
 
     /* ---------- Objective tracker + Practice coach (top center of the HUD) ---------- */
-    #hud-center { position: absolute; top: 84px; left: 50%; transform: translateX(-50%); width: min(560px, calc(100vw - 28px));
+    #hud-center { display: none;
                   display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
     #objective { padding: 10px 14px; font-size: 14px; }
     #objective .row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
@@ -75,7 +75,8 @@
     #coach .what { color: #d3dbe3; }
     #coach .fix { color: #fff; font-weight: 600; margin-top: 4px; }
     .msg.info { border-left-color: var(--accent); }
-    #drillCard { position: absolute; top: 70px; right: 14px; width: 210px; padding: 10px 12px; font-size: 13px; }
+    #p-card { position: absolute; top: var(--right-top, 70px); right: 14px; }
+    #drillCard { width: 210px; padding: 10px 12px; font-size: 13px; max-height: calc(100vh - var(--right-top, 70px) - 120px); overflow: auto; }
     #drillCard h4 { margin: 0 0 6px; font: 800 13px var(--sans); text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
     #drillCard ol { margin: 0; padding-left: 20px; columns: 1; }
     #drillCard li { line-height: 1.55; color: #c3cdd7; }
@@ -121,7 +122,34 @@
     /* ---------- In-game HUD ---------- */
     #hud { position: fixed; inset: 0; pointer-events: none; }
     #hud > * { pointer-events: auto; }
-    #hud-top-left { position: absolute; top: 14px; left: 14px; padding: 10px 14px; max-width: min(560px, 55vw); }
+    #hud > #hud-left { pointer-events: none; }
+    #hud-top-left { padding: 10px 14px; }
+    /* ---------- HUD panels: one left column + right column; minimize / maximize / move ---------- */
+    #hud-left { position: absolute; top: 14px; left: 14px; width: min(420px, calc(100vw - 28px)); display: flex; flex-direction: column;
+                gap: 6px; pointer-events: none; max-height: calc(100vh - 230px); overflow: hidden; }
+    .hudp { pointer-events: auto; position: relative; }
+    .hudp:has(> .pbody.hidden), #p-log:has(> #log:empty) { display: none; }
+    body.hud-edit .hudp { display: block !important; outline: 2px dashed rgba(79, 163, 255, 0.7); outline-offset: 2px; }
+    body.hud-edit .hudp > .pbody.hidden { display: block !important; min-height: 28px; opacity: 0.45; }
+    .ph { display: flex; align-items: center; gap: 4px; height: 0; overflow: visible; position: relative; z-index: 2; }
+    .ph span { display: none; }
+    .ph .pb { position: absolute; top: 4px; right: 4px; display: flex; gap: 3px; opacity: 0; transition: opacity .15s; }
+    .hudp:hover .ph .pb, body.hud-edit .ph .pb { opacity: 1; }
+    .ph button { font: 700 11px var(--sans); color: #fff; background: rgba(20, 28, 38, 0.92); border: 1px solid var(--line); border-radius: 4px;
+                 width: 22px; height: 20px; cursor: pointer; padding: 0; }
+    .ph button:hover { background: var(--accent-dark); }
+    .hudp.min > .ph, body.hud-edit .hudp > .ph { height: auto; }
+    .hudp.min > .ph span, body.hud-edit .ph span { display: inline; font: 700 11px var(--sans); color: #c3cdd7; text-transform: uppercase;
+                 letter-spacing: .6px; padding: 4px 8px; background: rgba(20, 28, 38, 0.92); border: 1px solid var(--line); border-radius: 4px; }
+    .hudp.min > .ph .pb, body.hud-edit .ph .pb { position: static; opacity: 1; }
+    .hudp.min > .pbody { display: none !important; }
+    body.hud-edit .ph { cursor: move; margin-bottom: 3px; }
+    .hudp.max #hud-top-left, .hudp.max #objective, .hudp.max #coach { font-size: 16px; }
+    #hud-left .hudp.max { width: min(620px, calc(100vw - 28px)); }
+    .hudp.max #drillCard { width: 300px; font-size: 15px; }
+    .hudp.max #metronome { width: 300px; height: 126px; }
+    #p-log.max #log { width: min(720px, 70vw); }
+    .hudp.moved { position: fixed !important; z-index: 5; }
     #hud-mode { font: 700 16px var(--sans); color: #fff; }
     #status { color: #b9c4cf; font-size: 14px; margin-top: 4px; line-height: 1.4; }
     #hud-attribution { color: #8592a0; font-size: 11.5px; margin-top: 6px; }
@@ -130,7 +158,8 @@
     .zoom-group { display: flex; align-items: center; gap: 4px; padding: 4px; }
     #zoomLabel { font: 600 13px var(--sans); color: var(--muted); min-width: 44px; text-align: center; }
 
-    #log { position: absolute; left: 14px; bottom: 100px; width: min(560px, 60vw); display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+    #p-log { position: absolute; left: 14px; bottom: 136px; }
+    #log { width: min(520px, 55vw); display: flex; flex-direction: column; gap: 6px; }
     .msg { padding: 8px 12px; font-size: 14px; line-height: 1.35; border-left: 4px solid var(--accent); transition: opacity .6s; }
     .msg.good { border-left-color: var(--good); } .msg.bad { border-left-color: var(--bad); } .msg.warn { border-left-color: var(--warn); }
     .msg.old { opacity: 0.5; }
@@ -146,7 +175,7 @@
     #voiceStatus:empty { display: none; }
     #voiceStatus.good { color: var(--good); } #voiceStatus.bad { color: var(--bad); } #voiceStatus.warn { color: var(--warn); }
 
-    #reference { position: absolute; top: 70px; right: 14px; bottom: 96px; width: 360px; overflow: auto; padding: 16px 18px;
+    #reference { position: absolute; top: 70px; right: 14px; bottom: 110px; z-index: 6; width: 360px; overflow: auto; padding: 16px 18px;
                  transition: transform .25s ease, opacity .25s; }
     #reference.closed { transform: translateX(110%); opacity: 0; pointer-events: none; }
     #reference h3 { font: 800 16px var(--sans); margin: 14px 0 6px; }
@@ -154,12 +183,13 @@
     #reference p, #reference li { color: #d3dbe3; font-size: 14px; line-height: 1.5; }
     #reference ul { padding-left: 18px; margin: 4px 0; }
     code { background: #1f2a37; padding: 1px 5px; border-radius: 3px; font-size: 12.5px; color: #fff; }
+    #minimapFrame.hud-off { display: none !important; }
     #minimapFrame { position: fixed; border: 2px solid rgba(255, 255, 255, 0.75); border-radius: 4px; pointer-events: none;
                     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45); }
     #toasts { position: fixed; top: 80px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
     .toast { padding: 10px 16px; font: 600 14px var(--sans); animation: toastIn .25s ease; }
     @keyframes toastIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
-    @media (max-width: 760px) { #reference { width: calc(100% - 28px); } #log { bottom: 150px; } }
+    @media (max-width: 760px) { #reference { width: calc(100% - 28px); } #p-log { bottom: 170px; } }
   </style>
 </head>
 <body>
@@ -245,10 +275,17 @@
 
   <!-- ===== In-game HUD (shown on the maps) ===== -->
   <div id="hud" class="hidden">
-    <div id="hud-top-left" class="panel">
-      <div id="hud-mode"></div>
-      <div id="status"></div>
-      <div id="hud-attribution"></div>
+    <!-- Left column: status, objective, coach (each panel can be minimized, maximized and moved: ui.js initHudPanels) -->
+    <div id="hud-left">
+      <section class="hudp" data-panel="status" data-title="Status">
+        <div id="hud-top-left" class="panel pbody">
+          <div id="hud-mode"></div>
+          <div id="status"></div>
+          <div id="hud-attribution"></div>
+        </div>
+      </section>
+      <section class="hudp" data-panel="objective" data-title="Objective"><div id="objective" class="panel pbody hidden"></div></section>
+      <section class="hudp" data-panel="coach" data-title="Coach"><div id="coach" class="panel pbody hidden"></div></section>
     </div>
     <div id="hud-top-right">
       <div class="zoom-group panel">
@@ -260,16 +297,15 @@
       <button class="btn" id="btnRef" title="Command reference">? Commands</button>
       <button class="btn hidden" id="btnTurn" title="Planning period: turn the flight 90 degrees (click the pad to move it)">↻ Turn flight</button>
       <button class="btn primary hidden" id="btnFinish" title="End the session and see your results">✔ Finish</button>
+      <button class="btn hidden" id="btnMap" title="Show / hide the minimap">🗺 Map</button>
+      <button class="btn" id="btnHudEdit" title="Edit the screen layout: drag panels by their title, minimize or maximize them">✎ HUD</button>
+      <button class="btn hidden" id="btnHudReset" title="Put every panel back where it started">Reset layout</button>
       <button class="btn" id="btnMenu" title="Main menu (Esc)">☰ Menu</button>
     </div>
-    <div id="hud-center">
-      <div id="objective" class="panel hidden"></div>
-      <div id="coach" class="panel hidden"></div>
-    </div>
-    <div id="drillCard" class="panel hidden"></div>
-    <div id="log"></div>
+    <section class="hudp" id="p-card" data-panel="card" data-title="Drill card"><div id="drillCard" class="panel pbody hidden"></div></section>
+    <section class="hudp" id="p-log" data-panel="log" data-title="Messages"><div id="log" class="pbody"></div></section>
     <div id="hud-bottom">
-      <canvas id="metronome" class="panel" width="200" height="84"></canvas>
+      <section class="hudp" id="p-metronome" data-panel="metronome" data-title="Metronome"><canvas id="metronome" class="panel pbody" width="200" height="84"></canvas></section>
       <div id="commandBar" class="panel">
         <input id="commandBox" placeholder="Type a command, e.g. Forward, HARCH  — Enter to give it" autocomplete="off" spellcheck="false">
         <button class="btn primary" id="sendBtn">Give</button>

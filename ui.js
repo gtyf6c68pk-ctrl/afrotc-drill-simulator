@@ -89,6 +89,8 @@ function setHud({ mode, attribution }) {
   $('coach').classList.add('hidden');
   $('btnFinish').classList.add('hidden');
   $('drillCard').classList.add('hidden');
+  $('btnMap').classList.add('hidden');
+  document.documentElement.style.setProperty('--right-top', '70px');
   setPlanningControls(null);
   showScreen('play');
 }
@@ -180,8 +182,9 @@ function updateRunHud(force) {
       html += '<div class="stats">Next: <b>' + esc(next.o.label) + '</b> · ' + Math.round(next.meters) + ' m ' + compass +
               ' <span style="display:inline-block;transform:rotate(' + deg + 'deg)">⬆</span></div>';
     } else if (run.objectives.some(o => o.type === 'movement')) {
-      html += '<div class="stats">Movements <b>' + done + ' / ' + run.objectives.length + '</b>: ' +
-              esc(run.objectives.filter(o => !o.done).map(o => o.label).join(', ')) + (run.inArea ? '' : ' · <span class="no">outside the field</span>') + '</div>';
+      html += '<div class="stats">Movements <b>' + done + ' / ' + run.objectives.length + '</b> (see the card)' +
+              (run.inArea ? '' : ' · <span class="no">outside the field</span>') + '</div>';
+      renderDrillCard(run);
     }
     html += '<div class="bar"><i style="width:' + (100 * done / run.objectives.length) + '%"></i></div>';
     const c = run.courtesy && run.courtesy.summary();
@@ -223,8 +226,7 @@ function updateRunHud(force) {
               '<div class="bar"><i style="width:' + (100 * done / run.objectives.length) + '%"></i></div>' +
               (done === run.objectives.length ? '<div class="say">' + esc(def.reportOut.say) + '</div>' : '');
     }
-    const card = '<h4>Drill card</h4><ol>' + run.objectives.map(o => '<li class="' + (o.done ? 'done' : '') + '">' + esc(o.label) + '</li>').join('') + '</ol>';
-    if ($('drillCard').innerHTML !== card) $('drillCard').innerHTML = card;
+    renderDrillCard(run);
     $('objective').innerHTML = html;
     return;
   }
@@ -252,6 +254,13 @@ function updateCourtesyHud(mon) {
   });
   $('objective').innerHTML = h;
   $('objective').classList.remove('hidden');
+}
+
+// The drill card (movement checklist) on the right
+function renderDrillCard(run) {
+  const card = '<h4>Drill card</h4><ol>' + run.objectives.filter(o => o.type === 'movement')
+    .map(o => '<li class="' + (o.done ? 'done' : '') + '">' + esc(o.label) + '</li>').join('') + '</ol>';
+  if ($('drillCard').innerHTML !== card) $('drillCard').innerHTML = card;
 }
 
 const esc = t => String(t === null || t === undefined ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
@@ -574,7 +583,8 @@ function showFeedback(message, good) {
   m.className = 'msg panel ' + (good === 'warn' ? 'warn' : good === 'info' ? 'info' : good ? 'good' : 'bad');
   m.textContent = message;
   log.appendChild(m);
-  while (log.children.length > 4) log.removeChild(log.firstChild);
+  const keep = $('p-log').classList.contains('max') ? 10 : 4;          // maximized: more messages
+  while (log.children.length > keep) log.removeChild(log.firstChild);
 }
 
 function showStatus(text) { $('status').textContent = text; }
@@ -650,11 +660,86 @@ function buildSettings() {
   });
 }
 
+// ---------- HUD panels: minimize, maximize, move (saved on this computer) ----------
+const HUD_KEY = 'drillSimulator.hud.v1';
+function hudLayout() { try { return JSON.parse(localStorage.getItem(HUD_KEY) || '{}'); } catch (e) { return {}; } }
+function saveHudLayout(l) { try { localStorage.setItem(HUD_KEY, JSON.stringify(l)); } catch (e) { /* private window */ } }
+
+function applyHudLayout() {
+  const l = hudLayout();
+  document.querySelectorAll('.hudp').forEach(p => {
+    const st = l[p.dataset.panel] || {};
+    p.classList.toggle('min', !!st.min);
+    p.classList.toggle('max', !!st.max);
+    p.classList.toggle('moved', st.x !== undefined);
+    p.style.left = st.x !== undefined ? Math.min(st.x, window.innerWidth - 80) + 'px' : '';
+    p.style.top = st.y !== undefined ? Math.min(st.y, window.innerHeight - 40) + 'px' : '';
+    p.style.right = st.x !== undefined ? 'auto' : '';
+    p.style.bottom = st.x !== undefined ? 'auto' : '';
+    const b = p.querySelector('[data-act="max"]');
+    if (b) b.textContent = st.max ? '⤡' : '⤢';
+    const m = p.querySelector('[data-act="min"]');
+    if (m) m.textContent = st.min ? '+' : '–';
+  });
+  $('minimapFrame').classList.toggle('hud-off', !!l.mapHidden);
+}
+
+function initHudPanels() {
+  document.querySelectorAll('.hudp').forEach(p => {
+    const head = document.createElement('div');
+    head.className = 'ph';
+    head.innerHTML = '<span>' + p.dataset.title + '</span><div class="pb">' +
+      '<button data-act="min" title="Minimize / restore">–</button><button data-act="max" title="Maximize / normal size">⤢</button></div>';
+    p.insertBefore(head, p.firstChild);
+    head.querySelectorAll('button').forEach(btn => btn.onclick = e => {
+      e.stopPropagation();
+      const l = hudLayout(), st = l[p.dataset.panel] = l[p.dataset.panel] || {};
+      if (btn.dataset.act === 'min') st.min = !st.min; else { st.max = !st.max; st.min = false; }
+      saveHudLayout(l); applyHudLayout();
+    });
+    // Edit mode: drag a panel by its title
+    head.addEventListener('pointerdown', e => {
+      if (!document.body.classList.contains('hud-edit') || e.target.tagName === 'BUTTON') return;
+      const r = p.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+      const move = ev => {
+        p.classList.add('moved');
+        p.style.left = Math.max(0, Math.min(window.innerWidth - 60, ev.clientX - dx)) + 'px';
+        p.style.top = Math.max(0, Math.min(window.innerHeight - 30, ev.clientY - dy)) + 'px';
+        p.style.right = 'auto'; p.style.bottom = 'auto';
+      };
+      const up = () => {
+        document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up);
+        const l = hudLayout(), st = l[p.dataset.panel] = l[p.dataset.panel] || {};
+        if (p.classList.contains('moved')) { st.x = parseFloat(p.style.left); st.y = parseFloat(p.style.top); saveHudLayout(l); }
+      };
+      document.addEventListener('pointermove', move); document.addEventListener('pointerup', up);
+      e.preventDefault();
+    });
+  });
+  $('btnHudEdit').onclick = () => {
+    const on = !document.body.classList.contains('hud-edit');
+    document.body.classList.toggle('hud-edit', on);
+    $('btnHudEdit').textContent = on ? '✔ Done' : '✎ HUD';
+    $('btnHudEdit').classList.toggle('on', on);
+    $('btnHudReset').classList.toggle('hidden', !on);
+    if (on) toast('Edit the HUD: drag panels by their title; – minimizes, ⤢ maximizes. Click Done when finished.', '');
+  };
+  $('btnHudReset').onclick = () => { saveHudLayout({}); applyHudLayout(); if (typeof activeScene !== 'undefined' && activeScene && activeScene.showMinimap) activeScene.showMinimap(true); };
+  $('btnMap').onclick = () => {
+    const l = hudLayout(); l.mapHidden = !l.mapHidden; saveHudLayout(l); applyHudLayout();
+    if (activeScene && activeScene.showMinimap) activeScene.showMinimap(!l.mapHidden);
+  };
+  window.addEventListener('resize', applyHudLayout);
+  applyHudLayout();
+  if (new URLSearchParams(location.search).get('hudEdit') === '1') setTimeout(() => $('btnHudEdit').click(), 300);   // (screenshots)
+}
+
 // ---------- Wiring (called once by main.js) ----------
 function wireUi() {
   buildCommandList();
   buildPracticeChoices();
   buildLiveChoices();
+  initHudPanels();
   buildReference();
   if (LINK.scenario && SCENARIOS[LINK.scenario]) currentScenario = LINK.scenario;
   document.querySelectorAll('.card[data-open]').forEach(card => { card.onclick = () => openScene(card.dataset.open); });

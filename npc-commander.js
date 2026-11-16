@@ -210,7 +210,7 @@ class PathNetwork {
 // was given (measured across the NEW facing; + = to its right).
 const NPC_TURNS = {
   'Column Right, HARCH': 2, 'Column Left, HARCH': -2, 'Column Half Right, HARCH': 1, 'Column Half Left, HARCH': -1,
-  'Incline to the Right': 1, 'Incline to the Left': -1,
+  'Incline to the Right': 1, 'Incline to the Left': -1,   // (route step only: calibrated at route step)
 };
 const NPC_CALIBRATION = {};
 
@@ -239,7 +239,8 @@ function calibrateTurns(elements, elementSize) {
     f.giveCommand('Forward, HARCH');
     while (f.realSteps() < 6) step();
     const cmd = COMMANDS_BY_KEY[cleanUpCommand(text)];
-    if (cmd.foot) strike(cmd.foot);
+    if (cmd.routeStepOnly) { f.giveCommand('Route Step, HARCH'); const u = f.realSteps() + 3; while (f.realSteps() < u) step(); }
+    if (cmd.foot && !f.routeStep) strike(cmd.foot);
     const c0 = flightCenter(f);
     f.giveCommand(text);
     let guard = 0;
@@ -443,6 +444,10 @@ class NpcCommander {
     const fl = this.flight;
     if (fl.pending || fl.haltAt !== null || fl.slides.length) return false;   // still finishing the last one
     const cmd = COMMANDS_BY_KEY[cleanUpCommand(text)];
+    if (fl.routeStep && cmd && !cmd.routeStepOk) {             // route step: call the flight to attention first
+      fl.giveCommand('Flight, Ten-HUT'); this.stats.commands++;
+      return false;
+    }
     const foot = cmd && this.flight.marching && !this.flight.routeStep ? cmd.foot : null;
     if (foot && foot !== 'either' && foot !== strikeFoot) return false;
     if (foot && !strikeFoot) return false;
@@ -638,7 +643,7 @@ class NpcCommander {
   turnCommand(delta, correcting) {
     if (delta === 2) return 'Column Right, HARCH';
     if (delta === -2) return 'Column Left, HARCH';
-    if (delta === 1) return correcting ? 'Incline to the Right' : 'Column Half Right, HARCH';
+    if (delta === 1) return correcting ? 'Incline to the Right' : 'Column Half Right, HARCH';   // corrections: at route step
     if (delta === -1) return correcting ? 'Incline to the Left' : 'Column Half Left, HARCH';
     return null;
   }
@@ -652,7 +657,8 @@ class NpcCommander {
     // 1. Not facing along the current leg (inclined to correct, or a turn still to finish): turn onto it
     if (h !== L.dir) {
       const delta = dirDelta(h, L.dir);
-      const text = this.turnCommand(delta, this.correcting);
+      // (straighten out with an incline at route step; at attention with Column Half: inclines are route step only)
+      const text = this.turnCommand(delta, this.correcting && f.routeStep);
       if (text && strike && this.timeToTurn(c, text, L.dir, L)) { if (this.tryGive(text, strike)) this.correcting = false; }
       else if (!text && strike) this.turnAround = true;
       return;
@@ -676,9 +682,13 @@ class NpcCommander {
     // 3. Stay centered on the sidewalk: incline toward the line when more than ~0.8 m off
     const e = this.lateral(c, L, h);
     const toEnd = (L.x2 - c.x) * dirVec(h).x + (L.y2 - c.y) * dirVec(h).y;
-    if (Math.abs(e) > 26 && toEnd > 260 && strike) {
+    // Long straight stretches are marched at ROUTE STEP (inclines are route step only, user's rule);
+    // the flight comes back to attention (Flight, Ten-HUT) before corners, halts and traffic.
+    if (!f.roadGuards && f.routeStep && (this.nearCorner || toEnd < 300)) { this.tryGive('Flight, Ten-HUT'); return; }
+    if (!f.roadGuards && !f.routeStep && !this.nearCorner && toEnd > 700 && strike) { this.tryGive('Route Step, HARCH', strike); return; }
+    if (Math.abs(e) > 26 && toEnd > 260 && f.routeStep) {
       const text = e > 0 ? 'Incline to the Left' : 'Incline to the Right';
-      if (this.tryGive(text, strike)) this.correcting = true;
+      if (this.tryGive(text)) this.correcting = true;
     }
     // 4. End of a fixed route: halt there. Dead end ahead with no route: turn around in place.
     if (!N && L.last) {

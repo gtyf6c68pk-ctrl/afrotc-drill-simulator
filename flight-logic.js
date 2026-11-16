@@ -1284,9 +1284,16 @@ class FlightLogic {
       return;
     }
 
-    // In double time only inclines, Quick Time and HALT may be given (DAFPAM 3.11.6).
+    // Inclines: ONLY at route step / at ease (user's detachment, 2026-11-16: route step and attention
+    // are two separate forms of marching; at route step only inclines + Ten-HUT, DAFPAM 3.19)
+    if (cmd.routeStepOnly && !this.routeStep) {
+      this.reject(text, cmd.key, 'Inclines are given at route step or at ease only (DAFPAM 3.19). Command Route Step, HARCH first, ' +
+                  'or change direction at attention with a column movement or a flank.');
+      return;
+    }
+    // In double time only Quick Time and HALT may be given (DAFPAM 3.11.6; inclines are route step only here).
     if (this.doubleTime && !cmd.doubleTimeOk) {
-      this.reject(text, cmd.key, 'In double time only inclines, Quick Time, HARCH and Flight, HALT can be given.');
+      this.reject(text, cmd.key, 'In double time only Quick Time, HARCH and Flight, HALT can be given.');
       return;
     }
     // While side stepping: only Flight, HALT (DAFPAM 3.14.3).

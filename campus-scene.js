@@ -267,6 +267,15 @@ class CampusScene extends Phaser.Scene {
     const f = $('minimapFrame');
     Object.assign(f.style, { left: (mmX - 2) + 'px', top: (mmY - 2) + 'px', width: mmW + 'px', height: mmH + 'px' });
     f.classList.remove('hidden');
+    $('btnMap').classList.remove('hidden');
+    this.showMinimap(!hudLayout().mapHidden);
+  }
+
+  // Minimap on/off (HUD: 🗺 Map); panels on the right start below it when it's shown
+  showMinimap(on) {
+    this.minimap.setVisible(on);
+    const f = $('minimapFrame');
+    document.documentElement.style.setProperty('--right-top', on ? (parseFloat(f.style.top) + parseFloat(f.style.height) + 14) + 'px' : '70px');
   }
 
   // ---------- Drawing the campus ----------

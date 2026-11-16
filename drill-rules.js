@@ -145,6 +145,7 @@ const DRILL = {
   //   action: which movement it triggers (see FlightLogic.runAction);
   //           `turn` = quarter turns, + right / - left (0.5 = 45 degrees, 1 = 90, 2 = 180)
   //   routeStepOk: true if it may be given at route step / at ease (DAFPAM 3.19)
+  //   routeStepOnly: true if it may ONLY be given at route step / at ease (inclines; user, 2026-11-16)
   //   doubleTimeOk: true if it may be given in double time (DAFPAM 3.11.6)
   //   markTimeOk:   true if it may be given while marking time
   //   notInvertedColumn: true if it can't be given while the flight is in INVERTED column
@@ -179,17 +180,17 @@ const DRILL = {
     { key: 'column half left harch', say: 'Column Half Left, HARCH', label: 'Column Half Left', foot: 'left', when: 'both',
       action: 'column', turn: -0.5, note: '45 degrees; full step resumes on its own', notInvertedColumn: true, ref: '4.12' },
     { key: 'incline to the right', say: 'Incline to the Right', label: 'Incline to the Right', foot: null, when: 'marching',
-      action: 'incline', turn: 0.5, routeStepOk: true, doubleTimeOk: true, note: 'slight change of direction (45 degrees), no pivot', ref: '4.12.4, 3.19' },
+      action: 'incline', turn: 0.5, routeStepOk: true, routeStepOnly: true, note: 'slight change of direction (45 degrees), no pivot', ref: '4.12.4, 3.19' },
     { key: 'incline to the left', say: 'Incline to the Left', label: 'Incline to the Left', foot: null, when: 'marching',
-      action: 'incline', turn: -0.5, routeStepOk: true, doubleTimeOk: true, note: 'slight change of direction (45 degrees), no pivot', ref: '4.12.4, 3.19' },
+      action: 'incline', turn: -0.5, routeStepOk: true, routeStepOnly: true, note: 'slight change of direction (45 degrees), no pivot', ref: '4.12.4, 3.19' },
     { key: 'guide incline 45 degrees to the right', say: 'Guide, incline 45 degrees to the Right', label: 'Guide, incline 45 degrees to the Right',
-      foot: null, when: 'marching', action: 'incline', turn: 0.5, routeStepOk: true, doubleTimeOk: true, ref: '3.19' },
+      foot: null, when: 'marching', action: 'incline', turn: 0.5, routeStepOk: true, routeStepOnly: true, ref: '3.19' },
     { key: 'guide incline 45 degrees to the left', say: 'Guide, incline 45 degrees to the Left', label: 'Guide, incline 45 degrees to the Left',
-      foot: null, when: 'marching', action: 'incline', turn: -0.5, routeStepOk: true, doubleTimeOk: true, ref: '3.19' },
+      foot: null, when: 'marching', action: 'incline', turn: -0.5, routeStepOk: true, routeStepOnly: true, ref: '3.19' },
     { key: 'guide incline 90 degrees to the right', say: 'Guide, incline 90 degrees to the Right', label: 'Guide, incline 90 degrees to the Right',
-      foot: null, when: 'marching', action: 'incline', turn: 1, routeStepOk: true, doubleTimeOk: true, ref: '3.19' },
+      foot: null, when: 'marching', action: 'incline', turn: 1, routeStepOk: true, routeStepOnly: true, ref: '3.19' },
     { key: 'guide incline 90 degrees to the left', say: 'Guide, incline 90 degrees to the Left', label: 'Guide, incline 90 degrees to the Left',
-      foot: null, when: 'marching', action: 'incline', turn: -1, routeStepOk: true, doubleTimeOk: true, ref: '3.19' },
+      foot: null, when: 'marching', action: 'incline', turn: -1, routeStepOk: true, routeStepOnly: true, ref: '3.19' },
     { key: 'half step harch', say: 'Half Step, HARCH', label: 'Half Step', foot: 'either', when: 'marching',
       action: 'halfStep', note: '12-inch steps until Forward, HARCH or HALT; no changes of direction', ref: '3.13' },
     { key: 'mark time harch', say: 'Mark Time, HARCH', label: 'Mark Time', foot: 'either', when: 'both',
@@ -240,7 +241,7 @@ const DRILL = {
 
 // ---------- Inclines in 15-degree steps (user, 2026-11-16) ----------
 // "Incline 15 degrees TO THE RIGHT" ... 90, both directions, plus the guide forms ("Guide, incline
-// 30 degrees to the Left"). Allowed at attention and at route step / at ease (DAFPAM 3.19, 4.12.4:
+// 30 degrees to the Left"). ONLY at route step / at ease (user's rule, 2026-11-16; DAFPAM 3.19, 4.12.4:
 // the guide inclines and the flight follows; no pivot, no half step afterwards).
 [15, 30, 45, 60, 75, 90].forEach(deg => {
   ['Right', 'Left'].forEach(side => {
@@ -248,7 +249,7 @@ const DRILL = {
     const add = (key, say) => {
       if (DRILL.commands.some(c => c.key === key)) return;
       DRILL.commands.push({ key, say, label: say, foot: null, when: 'marching', action: 'incline', turn,
-                            routeStepOk: true, doubleTimeOk: true, note: deg + ' degrees, no pivot', ref: '3.19, 4.12.4' });
+                            routeStepOk: true, routeStepOnly: true, note: deg + ' degrees, no pivot; at route step / at ease only', ref: '3.19, 4.12.4' });
     };
     add('incline ' + deg + ' degrees to the ' + side.toLowerCase(), 'Incline ' + deg + ' degrees TO THE ' + side.toUpperCase());
     add('guide incline ' + deg + ' degrees to the ' + side.toLowerCase(), 'Guide, incline ' + deg + ' degrees to the ' + side);
