@@ -41,7 +41,23 @@ class PeopleSim {
       const sub = P.civilianKinds[Math.floor(this.rand() * P.civilianKinds.length)];
       this.add({ kind: 'civilian', sub, sex: this.rand() < 0.5 ? 'M' : 'F' });
     }
-    pick(roster.poc, n(P.poc)).forEach(r => this.add({ kind: 'poc', person: r, sex: r.sex }));
+    // POC: some walk together in groups of the same sex (greeted "Good morning, gentlemen / ladies")
+    const pocs = pick(roster.poc, n(P.poc));
+    let gid = 0;
+    (P.pocGroups || []).forEach(size => {
+      for (const sex of ['M', 'F']) {
+        const same = pocs.filter(r => r.sex === sex && !r._used);
+        if (same.length < size) continue;
+        gid++;
+        const members = same.slice(0, size);
+        members.forEach(r => { r._used = true; });
+        const lead = this.add({ kind: 'poc', person: members[0], sex, group: 'g' + gid });
+        members.slice(1).forEach((r, i) => this.add({ kind: 'poc', person: r, sex, group: 'g' + gid, follows: lead, slot: i + 1 }));
+        break;
+      }
+    });
+    pocs.filter(r => !r._used).forEach(r => this.add({ kind: 'poc', person: r, sex: r.sex }));
+    pocs.forEach(r => { delete r._used; });
     pick(roster.cadre, Math.max(1, n(P.cadre))).forEach(r => this.add({ kind: 'cadre', person: r, sex: r.sex }));
   }
 
@@ -50,8 +66,10 @@ class PeopleSim {
     const n = live[Math.floor(this.rand() * live.length)];
     Object.assign(p, { id: 'p' + this.people.length, x: n.x, y: n.y, node: n.id, target: null, angle: 0,
                        speedK: 0.85 + this.rand() * 0.3, seed: Math.floor(this.rand() * 1e6), step: 0, waiting: 0, aside: 0 });
-    this.pickNext(p);
+    if (p.follows) { p.x = p.follows.x + 15 * p.slot; p.y = p.follows.y; }
+    else this.pickNext(p);
     this.people.push(p);
+    return p;
   }
 
   // Walk to a random neighbouring junction (no immediate U-turn if there's another way)
@@ -69,6 +87,16 @@ class PeopleSim {
   // flights: FlightLogic list; people get out of the way of any formation
   update(dt, flights) {
     this.people.forEach(p => {
+      if (p.follows) {                              // in a group: walk next to / just behind the leader
+        const L = p.follows, s = Math.sin(L.angle), c = -Math.cos(L.angle);   // leader's facing
+        const side = (p.slot % 2 ? 1 : -1) * 26, back = Math.ceil(p.slot / 2) * 10;
+        const tx = L.x - s * back + (-c) * side, ty = L.y - c * back + s * side;
+        const dx = tx - p.x, dy = ty - p.y, d = Math.hypot(dx, dy), step = this.speed * 1.4 * dt;
+        if (d > 1) { const k = Math.min(1, step / d); p.x += dx * k; p.y += dy * k; p.moving = true; p.step += Math.min(d, step); }
+        else p.moving = L.moving;
+        p.angle = L.angle;
+        return;
+      }
       const T = this.net.nodes[p.node];
       const dx = T.x - p.x, dy = T.y - p.y, d = Math.hypot(dx, dy);
       const ux = d ? dx / d : 0, uy = d ? dy / d : 0;
@@ -112,8 +140,26 @@ function courtesyClean(text) {
 function expectedGreetings(p, hour) {
   const tod = courtesyTimeWord(hour);
   const sirmaam = p.sex === 'F' ? 'maam' : 'sir';
-  const address = p.person ? (p.person.addressAs + ' ' + p.person.last) : '';
-  return (COURTESY.greetings[p.kind] || []).map(t => courtesyClean(t.replace('{tod}', tod).replace('{sirmaam}', sirmaam).replace('{address}', address)));
+  const r = p.person || {};
+  const fill = t => courtesyClean(t.replace('{tod}', tod).replace('{sirmaam}', sirmaam).replace('{rank}', r.rankSpoken || '')
+    .replace('{address}', r.addressAs || '').replace('{abbr}', (r.rank || '').replace('/', ' ')).replace('{last}', r.last || ''));
+  return [...new Set((COURTESY.greetings[p.kind] || []).map(fill))];
+}
+
+// A cleaned-up greeting written out properly for messages: "Pardon my flight please, Ma'am"
+function niceGreeting(t) {
+  const m = t.match(/^(pardon my flight please|pardon my flight|good (morning|afternoon|evening))\s+(.*)$/);
+  if (!m) return t.charAt(0).toUpperCase() + t.slice(1);
+  const rest = m[3].replace(/\bmaam\b/, "ma'am").replace(/\b(c) (\w)/, 'C/$2').replace(/\b\w/g, c => c.toUpperCase());
+  return m[1].charAt(0).toUpperCase() + m[1].slice(1) + ', ' + rest;
+}
+
+// The greeting for a group walking together (all male / all female / mixed)
+function groupGreetings(members, hour) {
+  const tod = courtesyTimeWord(hour);
+  const sexes = new Set(members.map(m => m.sex));
+  const kind = sexes.size > 1 ? 'mixed' : sexes.has('F') ? 'female' : 'male';
+  return COURTESY.groupGreetings[kind].map(t => courtesyClean(t.replace('{tod}', tod)));
 }
 
 // Who someone is, in words for messages
@@ -166,7 +212,8 @@ class CourtesyMonitor {
   }
 
   record(p, outcome, detail) {
-    const r = { who: personLabel(p), kind: p.kind, outcome, detail, time: Math.round(this.time), expected: expectedGreetings(p, this.hour())[0] };
+    const r = { who: personLabel(p), kind: p.kind, outcome, detail, time: Math.round(this.time),
+                expected: (p.group ? niceGreeting(groupGreetings([p], this.hour())[0]) + ' (group) or ' : '') + niceGreeting(expectedGreetings(p, this.hour())[0]) };
     this.results.push(r);
     if (this.opts.onResult) this.opts.onResult(r);
   }
@@ -182,23 +229,37 @@ class CourtesyMonitor {
       if (officer) { officer.saluted = true; return { good: true, message: 'Salute rendered to ' + personLabel(officer.p) + '.' }; }
       return { good: 'warn', message: 'You saluted, but no officer is close enough to recognize.' };
     }
-    if (!/^good (morning|afternoon|evening)\b/.test(t)) return null;   // not a greeting
+    if (!/^(good (morning|afternoon|evening)|pardon my flight)\b/.test(t)) return null;   // not a greeting
     const open = [...this.open.values()].filter(it => !it.greeted);
     if (!open.length) return { good: 'warn', message: 'Nobody close enough to greet.' };
-    // Whom is it for? The person whose correct greeting matches; else the closest one
     const c = this.flight.commander;
     const hour = this.hour();
-    const match = open.find(it => expectedGreetings(it.p, hour).includes(t));
+    // A group walking together (two or more of them close): one greeting for all of them
+    const groups = {};
+    open.forEach(it => { if (it.p.group) (groups[it.p.group] = groups[it.p.group] || []).push(it); });
+    for (const items of Object.values(groups)) {
+      if (items.length < 2) continue;
+      if (groupGreetings(items.map(it => it.p), hour).includes(t)) {
+        items.forEach(it => { it.greeted = true; this.close(it); });
+        return { good: true, message: 'Greeted the group (' + items.map(it => it.p.person.display).join(', ') + ').' };
+      }
+    }
+    // Whom is it for? The person whose correct greeting matches; else the closest one
+    const inGroup = it => it.p.group && (groups[it.p.group] || []).length >= 2;
+    const match = open.find(it => !inGroup(it) && expectedGreetings(it.p, hour).includes(t));
     if (match) {
       match.greeted = true;
       if (!this.needsSalute(match.p) || match.saluted) { this.close(match); return { good: true, message: 'Greeted ' + personLabel(match.p) + '.' }; }
       return { good: true, message: 'Greeted ' + personLabel(match.p) + '. Salute too: an officer.' };
     }
     const nearest = open.sort((a, b) => Math.hypot(a.p.x - c.x, a.p.y - c.y) - Math.hypot(b.p.x - c.x, b.p.y - c.y))[0];
-    const want = expectedGreetings(nearest.p, hour);
+    const group = inGroup(nearest) ? groups[nearest.p.group] : null;
+    const want = group ? groupGreetings(group.map(it => it.p), hour) : expectedGreetings(nearest.p, hour);
     const tod = courtesyTimeWord(hour);
-    let why = 'say "' + want[0] + '"';
-    if (!t.includes(tod)) why = 'it is ' + tod + ': ' + why;
+    let why = 'say "' + niceGreeting(want[0]) + '"';
+    if (group) why = 'they are a group: ' + why;
+    else if (nearest.p.kind === 'civilian') why = 'for civilians: ' + why;
+    else if (!t.includes(tod)) why = 'it is ' + tod + ': ' + why;
     else if (nearest.p.person && !t.includes(nearest.p.person.last.toLowerCase())) why = 'use rank and name: ' + why;
     nearest.wrong = why;
     return { good: false, message: 'Not quite for ' + personLabel(nearest.p) + ': ' + why + '.' };
@@ -216,8 +277,12 @@ function courtesyPhrases() {
   const out = new Set(COURTESY.saluteWords);
   const roster = typeof ROSTER !== 'undefined' ? [...ROSTER.poc, ...ROSTER.cadre] : [];
   COURTESY.timeOfDay.forEach(({ word }) => {
-    ['', ' sir', " ma'am"].forEach(s => out.add('good ' + word + s));
-    roster.forEach(r => out.add(('good ' + word + ' ' + r.addressAs + ' ' + r.last).toLowerCase()));
+    ['', ' sir', " ma'am", ' gentlemen', ' ladies', ' ladies and gentlemen'].forEach(s => out.add('good ' + word + s));
+    roster.forEach(r => {
+      out.add(('good ' + word + ' ' + r.addressAs + ' ' + r.last).toLowerCase());
+      out.add(('good ' + word + ' ' + r.rankSpoken + ' ' + r.last).toLowerCase());
+    });
   });
+  ['sir', "ma'am"].forEach(x => { out.add('pardon my flight please ' + x); out.add('pardon my flight ' + x); });
   return [...out];
 }

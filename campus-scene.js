@@ -57,6 +57,10 @@ class CampusScene extends Phaser.Scene {
       sidewalkEdge: (x, y, h) => this.sidewalkEdge(x, y, h),
       stairsAt: (x, y) => this.stairsAt(x, y),
       intersections: this.intersections,
+      onIntersection: (event, ix) => {              // say clearly when the road guard procedure is needed
+        if (!ix.roadGuards || this.flight.roadGuards) return;
+        if (event === 'approaching') toast('⚠ Road guard intersection ahead: ' + ix.name + '. Halt at the white HALT line, COVER, then Road Guards, OUT.', 'warn');
+      },
       onFeedback: showFeedback,
       onStatus: showStatus,
       cadence: settings.cadence,
@@ -69,6 +73,7 @@ class CampusScene extends Phaser.Scene {
     });
     this.flightView = new FlightView(this, this.flight, this.worldLayer);
     setActiveFlight(this.flight);
+    this.drawRoadGuardZones();
     this.addNpcFlights(def ? this.difficulty.npcFlights : (settings.npcFlights || 0));
     this.addPeople(def ? this.difficulty.people : 1);
     this.events.once('shutdown', () => {
@@ -166,6 +171,47 @@ class CampusScene extends Phaser.Scene {
     });
     activeCourtesy = this.courtesy;
     this.events.once('shutdown', () => { activeCourtesy = null; });
+  }
+
+  // ROAD GUARD intersections (only where the detachment uses them: the concourse through the Village):
+  // a hatched yellow zone with "ROAD GUARDS", and a white HALT line across every walkway leading in,
+  // where the flight should halt before commanding Road Guards, OUT.
+  drawRoadGuardZones() {
+    const M = CAMPUS.pxPerMeter, g = this.add.graphics().setDepth(7);
+    this.worldLayer.add(g);
+    const walks = CAMPUS.roads.filter(r => ['footway', 'path', 'pedestrian', 'cycleway'].includes(r.k));
+    const nearWalk = (x, y) => {
+      let best = null;
+      walks.forEach(r => { for (let i = 0; i + 3 < r.p.length; i += 2) {
+        const d = distanceToLine(x, y, [r.p[i], r.p[i + 1], r.p[i + 2], r.p[i + 3]]);
+        if (d < r.w / 2 && (!best || r.w > best.w)) best = r;
+      } });
+      return best;
+    };
+    this.intersections.filter(ix => ix.roadGuards).forEach(ix => {
+      // hatched zone
+      g.fillStyle(0xffd166, 0.18).fillCircle(ix.x, ix.y, ix.r);
+      g.lineStyle(10, 0xffd166, 0.95).strokeCircle(ix.x, ix.y, ix.r);
+      g.lineStyle(6, 0x111111, 0.5);
+      for (let d = -ix.r + 20; d < ix.r; d += 40) {      // diagonal hatching, kept inside the circle
+        const h = Math.sqrt(Math.max(0, ix.r * ix.r - d * d)), cx = ix.x + d * Math.SQRT1_2, cy = ix.y - d * Math.SQRT1_2;
+        g.lineBetween(cx - h * Math.SQRT1_2, cy - h * Math.SQRT1_2, cx + h * Math.SQRT1_2, cy + h * Math.SQRT1_2);
+      }
+      const label = this.add.text(ix.x, ix.y, 'ROAD GUARDS', { fontFamily: 'Inter, sans-serif', fontStyle: '800', fontSize: '34px',
+        color: '#ffd166', stroke: '#10161e', strokeThickness: 7 }).setOrigin(0.5).setDepth(8);
+      this.worldLayer.add(label);
+      // HALT lines on every walkway arm, a few meters before the zone
+      for (let k = 0; k < 8; k++) {
+        const a = k * Math.PI / 4, ux = Math.sin(a), uy = -Math.cos(a), dist = ix.r + 5 * M;
+        const x = ix.x + ux * dist, y = ix.y + uy * dist, walk = nearWalk(x, y);
+        if (!walk) continue;
+        const half = walk.w / 2 - 6;
+        g.lineStyle(14, 0xffffff, 0.95).lineBetween(x - uy * half, y + ux * half, x + uy * half, y - ux * half);
+        const t = this.add.text(x + ux * 30, y + uy * 30, 'HALT', { fontFamily: 'Inter, sans-serif', fontStyle: '800', fontSize: '24px',
+          color: '#ffffff', stroke: '#10161e', strokeThickness: 6 }).setOrigin(0.5).setDepth(8);
+        this.worldLayer.add(t);
+      }
+    });
   }
 
   // Live mission: the planned route (dashed, if the difficulty shows it) and the checkpoints

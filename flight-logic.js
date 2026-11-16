@@ -333,7 +333,7 @@ class FlightLogic {
   // The direction most of the flight is facing
   mainDir() {
     const counts = [0, 0, 0, 0, 0, 0, 0, 0];
-    this.members().forEach(p => counts[p.dir]++);
+    this.members().forEach(p => { if (!p.roadGuard) counts[p.dir]++; });   // road guards face the traffic
     return counts.indexOf(Math.max(...counts));
   }
 
@@ -361,7 +361,7 @@ class FlightLogic {
   // Where the guide belongs at the halt (DAFPAM 4.2.3, 4.2.5, 4.2.6)
   guidePost() {
     const h = this.mainDir();
-    const m = this.members();
+    const m = this.members().filter(p => !p.roadGuard);   // road guards out at the intersection don't count (bug fix)
     const front = Math.max(...m.map(p => aOf(p, h)));
     const right = Math.max(...m.map(p => bOf(p, h)));
     const left  = Math.min(...m.map(p => bOf(p, h)));
@@ -380,7 +380,7 @@ class FlightLogic {
     if (this.cdrHold) return this.cdrHold;
     if (this.cdrStayPut) return { x: this.commander.x, y: this.commander.y, dir: this.commander.dir };
     const h = this.mainDir();
-    const m = this.members().filter(p => p.dir === h);
+    const m = this.members().filter(p => p.dir === h && !p.roadGuard);   // (road guards out don't count)
     const front = Math.max(...m.map(p => aOf(p, h)));
     const rear  = Math.min(...m.map(p => aOf(p, h)));
     const left  = Math.min(...m.map(p => bOf(p, h)));

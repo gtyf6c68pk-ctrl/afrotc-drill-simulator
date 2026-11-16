@@ -397,8 +397,8 @@ function showBriefing(def, difficulty) {
   h += '<h3>Objectives</h3><ol class="tips">' + def.objectives.map(o => '<li>' + esc(o.label) + '</li>').join('') + '</ol>';
   h += '<h3>Remember</h3><ul class="tips">' + (def.usesRoadGuards ? '<li>Road guards (more than 8 in the flight): halt before the intersection, <code>Road Guards, OUT</code>, march through, <code>Road Guards, IN</code>.</li>' : '') +
        '<li>Stairs: <code>Route Step, HARCH</code> first, <code>Flight, Ten-HUT</code> after.</li>' +
-       '<li>Officers: type or say <code>SALUTE</code> and the greeting, e.g. <code>Good morning, sir</code>. POC: rank and name.' +
-       (COURTESY.confirmed ? '' : ' <span class="na">(greeting wording is a placeholder until your detachment confirms it)</span>') + '</li>' +
+       '<li>Cadre: <code>SALUTE</code> and <code>Good morning, Captain Moore</code> (rank + last name). POC: <code>Good morning, Cadet Captain Reed</code>; ' +
+       'a group of POC: <code>Good morning, gentlemen</code> / <code>ladies</code>. Civilians: <code>Pardon my flight please, Sir/Ma\'am</code>.</li>' +
        '<li>Score: 100 minus penalties (no road guards −15, obstacle −10, stairs at attention −5, missed greeting or salute −4, off route, refused or wrong-foot commands).</li></ul>';
   h += '<div class="sheet-actions"><button class="btn" id="briefingMenu">☰ Main menu</button><button class="btn primary" id="briefingStart">▶ Start</button></div>';
   $('briefingSheet').innerHTML = h;

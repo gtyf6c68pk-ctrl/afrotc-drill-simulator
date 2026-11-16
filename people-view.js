@@ -38,14 +38,40 @@ class PeopleView {
     const box = this.scene.add.container(p.x, p.y, [shadow, g]).setDepth(9);
     const ring = this.scene.add.circle(0, 0, 14).setStrokeStyle(2, 0xffd166, 0.9).setVisible(false);
     box.addAt(ring, 0);
-    let tag = null;
+    let tag = null, badge = null;
     if (p.person) {
-      tag = this.scene.add.text(p.x, p.y, p.person.rank, { fontFamily: 'Inter, sans-serif', fontStyle: '800', fontSize: '13px',
+      badge = this.makeInsignia(p.person.rank);             // the rank tab with its insignia, above them
+      if (this.layer) this.layer.add(badge);
+      tag = this.scene.add.text(p.x, p.y, '', { fontFamily: 'Inter, sans-serif', fontStyle: '800', fontSize: '13px',
         color: p.kind === 'cadre' ? '#ffd166' : '#ffffff', stroke: '#10161e', strokeThickness: 4 }).setOrigin(0.5, 1).setDepth(12);
       if (this.layer) this.layer.add(tag);
     }
     if (this.layer) this.layer.add(box);
-    return { box, g, ring, tag };
+    return { box, g, ring, tag, badge };
+  }
+
+  // A small rank tab (COURTESY.insignia): black with silver marks for POC, OCP tan with dark marks
+  // for cadre. Drawn in map units, centered at (0, 0).
+  makeInsignia(rank) {
+    const I = COURTESY.insignia[rank] || { tab: 'cadet' };
+    const g = this.scene.add.graphics().setDepth(12);
+    const W = 26, H = 16, cadet = I.tab === 'cadet';
+    g.fillStyle(0x10161e, 0.9).fillRect(-W / 2 - 1.5, -H / 2 - 1.5, W + 3, H + 3);              // outline
+    g.fillStyle(cadet ? 0x1b1b1b : 0xa59a77, 1).fillRect(-W / 2, -H / 2, W, H);                 // tab
+    const mark = cadet ? 0xd9dde2 : 0x3b3326;
+    g.fillStyle(mark, 1);
+    if (I.stripes) for (let i = 0; i < I.stripes; i++) g.fillRect(-9, -H / 2 + 3 + i * 4, 18, 2.4);
+    if (I.diamonds) for (let i = 0; i < I.diamonds; i++) {
+      const cx = (i - (I.diamonds - 1) / 2) * 7.5;
+      g.fillTriangle(cx - 3.2, 0, cx, -4.5, cx + 3.2, 0); g.fillTriangle(cx - 3.2, 0, cx, 4.5, cx + 3.2, 0);
+    }
+    if (I.bars) for (let i = 0; i < I.bars; i++) g.fillRect(-5 + i * 6 - (I.bars - 1) * 0.5, -5, 3, 10);
+    if (I.leaf) {                                            // oak leaf: a leaf shape with a stem
+      g.fillEllipse(0, -1, 9, 11); g.fillRect(-0.7, 3, 1.4, 4);
+      g.fillStyle(cadet ? 0x1b1b1b : 0xa59a77, 1).fillRect(-0.4, -5, 0.8, 7);
+    }
+    if (I.eagle) { g.fillTriangle(-9, -2, 0, 3, 9, -2); g.fillCircle(0, -3, 2); }
+    return g;
   }
 
   // commander: the player's flight commander (names show when close); waiting: Set of person ids
@@ -57,9 +83,10 @@ class PeopleView {
       it.g.setRotation(p.angle);
       it.g.y = p.moving ? Math.sin(p.step / 6) * 0.6 : 0;          // a little bob while walking
       it.ring.setVisible(!!(waiting && waiting.has(p.id)));
-      if (it.tag) {
+      if (it.tag) {                                       // insignia always; the name when they're close
         const close = commander && Math.hypot(commander.x - p.x, commander.y - p.y) < near;
-        it.tag.setText(close ? p.person.display : p.person.rank).setPosition(p.x, p.y - 14);
+        it.badge.setPosition(p.x, p.y - 20);
+        it.tag.setText(close ? p.person.display : '').setPosition(p.x, p.y - 30);
       }
     });
   }
