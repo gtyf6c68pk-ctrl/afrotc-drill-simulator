@@ -63,13 +63,15 @@ function signedTimingAt(p, foot) {
   return p - (Math.round((p - offset) / 2) * 2 + offset);
 }
 
-function prepTimingProblem(prepStep, execStep, foot, grace) {
+function prepTimingProblem(prepStep, execStep, foot, grace, stepSec) {
   grace = grace || TIMING_GRACE;
   const P = DRILL.preparatory;
   const gap = execStep - prepStep;
   const round2 = v => Math.round(v * 100) / 100;
   if (gap < P.minGapSteps) {
-    return { error: 1, gap: round2(gap), text: 'the preparatory command and the command of execution ran together; leave one step between them (DAFPAM 2.4.1)' };
+    const secs = stepSec ? ' (' + (gap * stepSec).toFixed(2) + ' s apart; at this cadence about ' + (2 * stepSec).toFixed(1) + ' s)' : '';
+    return { error: 1, gap: round2(gap), text: 'the preparatory command and the command of execution ran together' + secs +
+             '; "Flank" on the heel, the command of execution when that SAME heel strikes again (DAFPAM 2.4.1, 3.9.2)' };
   }
   if (foot === 'either') {                         // Flight, HALT: both parts on the same heel (even gap)
     const error = Math.abs(gap - 2 * Math.round(gap / 2));
@@ -78,8 +80,10 @@ function prepTimingProblem(prepStep, execStep, foot, grace) {
   }
   const error = timingErrorAt(prepStep, foot);
   if (error <= grace) return null;
-  return { error: round2(error), gap: round2(gap),
-           text: 'preparatory command ' + (error > 0.5 ? 'on the WRONG foot' : 'a little off the heel strike') +
+  const by = stepSec && error <= 0.5 ? ' (' + Math.abs(signedTimingAt(prepStep, foot) * stepSec).toFixed(2) + ' s ' +
+             (signedTimingAt(prepStep, foot) > 0 ? 'late' : 'early') + ')' : '';
+  return { error: round2(error), gap: round2(gap), by,
+           text: 'preparatory command ' + (error > 0.5 ? 'on the WRONG foot' : 'a little off the heel strike' + by) +
                  '; give it as the ' + foot.toUpperCase() + ' heel strikes, two steps before the command of execution (DAFPAM 3.9.2)' };
 }
 
@@ -564,7 +568,7 @@ class FlightLogic {
     const error = timingErrorAt(exactStep, handle.foot);
     const problem = this.timingProblem(error, handle.foot, signedTimingAt(exactStep, handle.foot) * handle.stepSec);
     const prepStep = prepAgeAtGive !== undefined && prepAgeAtGive !== null ? handle.stepAtGive - prepAgeAtGive / handle.stepSec : null;
-    const prep = prepStep !== null ? prepTimingProblem(prepStep, exactStep, handle.foot, this.grace()) : null;
+    const prep = prepStep !== null && this.opts.gradePrep !== false ? prepTimingProblem(prepStep, exactStep, handle.foot, this.grace(), handle.stepSec) : null;
     this.log('timing-graded', { commandId: handle.id, name: handle.name, foot: handle.foot,
                                 timingError: Math.round(error * 100) / 100, problem: problem ? problem.text : null,
                                 prepGiven: prepStep !== null, prepProblem: prep ? prep.text : null,
@@ -1284,7 +1288,8 @@ class FlightLogic {
     const timing = this.timingError(foot, options.ageSeconds || 0);
     const stepSec = this.doubleTime ? this.doubleStepSeconds : this.stepSeconds;
     const execStep = saidStep(options.ageSeconds);
-    const prepIssue = foot && prepStep !== null && !options.deferTiming ? prepTimingProblem(prepStep, execStep, foot, this.grace()) : null;
+    const prepIssue = foot && prepStep !== null && !options.deferTiming && this.opts.gradePrep !== false
+      ? prepTimingProblem(prepStep, execStep, foot, this.grace(), stepSec) : null;
     const signedSec = foot && execStep !== null ? signedTimingAt(execStep, foot) * stepSec : null;
     this.commandAt = this.realSteps() - (options.ageSeconds || 0) / stepSec;   // when it was really given
 

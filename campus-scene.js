@@ -64,6 +64,7 @@ class CampusScene extends Phaser.Scene {
       elementSize: settings.elementSize,
       cdrSide: settings.cdrSide,
       timingOffset: { voice: settings.timingOffsetVoice || 0, typed: settings.timingOffsetTyped || 0 },   // calibration
+      gradePrep: settings.gradePrep !== 'off',
       disorder: DISORDER_LEVELS[settings.disorder],
     });
     this.flightView = new FlightView(this, this.flight, this.worldLayer);

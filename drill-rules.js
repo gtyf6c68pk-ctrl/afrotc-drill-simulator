@@ -46,7 +46,8 @@ const DRILL = {
   // At route step / at ease, both parts must be on the same foot (3.19).
   preparatory: {
     gapSteps: 2,           // execution comes this many steps after the preparatory command
-    minGapSteps: 1.5,      // closer than this = the two parts run together
+    minGapSteps: 1,        // closer than ONE full step = the two parts ran together (DAFPAM 2.4.1 "one step
+                           // between"; was 1.5, too strict at 120 steps/min, user 2026-11-15)
     holdSeconds: 4,        // a typed/spoken preparatory command waits this long for its execution word
     unitWord: 'flight',    // "Flight" is the preparatory command of Flight, HALT / Flight, Ten-HUT (2.1.1.1)
   },

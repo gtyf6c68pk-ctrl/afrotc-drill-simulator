@@ -48,6 +48,7 @@ class DrillPadScene extends Phaser.Scene {
       cdrSide: settings.cdrSide,
       coverAfterHalt: !(def.rules && def.rules.coverAfterHalt === false),   // FDE: COVER only has to be given once
       timingOffset: { voice: settings.timingOffsetVoice || 0, typed: settings.timingOffsetTyped || 0 },   // calibration
+      gradePrep: settings.gradePrep !== 'off',
       disorder: DISORDER_LEVELS[settings.disorder],
     });
     this.flightView = new FlightView(this, this.flight);

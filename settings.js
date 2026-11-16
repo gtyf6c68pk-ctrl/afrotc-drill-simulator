@@ -39,6 +39,8 @@ const SETTING_OPTIONS = [
     show: v => v === 0 ? 'None' : String(v) },
   { key: 'campusPeople', label: 'People on campus (greet and salute)', values: ['on', 'off'],
     show: v => v === 'on' ? 'Shown' : 'None' },
+  { key: 'gradePrep', label: 'Grade the preparatory command (e.g. "Right Flank") too', values: ['on', 'off'],
+    show: v => v === 'on' ? 'Yes' : 'Only HARCH' },
 ];
 
 const DEFAULT_SETTINGS = {
@@ -50,6 +52,7 @@ const DEFAULT_SETTINGS = {
   npcFlights: 3,
   campusPeople: 'on',
   liveDifficulty: 'standard',
+  gradePrep: 'on',      // grade the preparatory command's timing too (DAFPAM 3.9.2)
   timingOffsetVoice: 0,  // seconds this computer's voice timing runs late (Practice → Timing calibration)
   timingOffsetTyped: 0,  // the same for typing (Enter key)
   disorder: 'normal',
