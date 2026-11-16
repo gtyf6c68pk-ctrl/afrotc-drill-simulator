@@ -60,6 +60,7 @@ class CampusScene extends Phaser.Scene {
     this.flightView = new FlightView(this, this.flight, this.worldLayer);
     setActiveFlight(this.flight);
     this.addNpcFlights(settings.npcFlights || 0);
+    this.addPeople();
     this.events.once('shutdown', () => {
       setActiveFlight(null); activeCamera = null;
       this.scale.off('resize', this.placeMinimap, this);
@@ -131,8 +132,33 @@ class CampusScene extends Phaser.Scene {
     }
   }
 
-  // Move the computer-controlled flights (also used by the page-address fast-forward)
-  stepOthers(dt) { (this.npcs || []).forEach(n => { n.update(dt); n.flight.update(dt); }); }
+  // Campus people (civilians, POC, cadre) and the courtesy checks (courtesy.js)
+  addPeople() {
+    if (settings.campusPeople === 'off') return;
+    let seed = LINK.seed ? LINK.seed + 99 : null;
+    const rand = seed ? () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; } : Math.random;
+    this.walkNet = walkwayNetwork(this);
+    this.people = new PeopleSim(this.walkNet, { rand });
+    this.peopleView = new PeopleView(this, this.people, this.worldLayer);
+    this.courtesy = new CourtesyMonitor(this.flight, {
+      onResult: r => {
+        const msg = { correct: '✔ Courtesy: ' + r.who, missed: '✘ Missed greeting: ' + r.who + ' ("' + r.expected + '")',
+                      'wrong-words': '✘ ' + r.who + ': ' + r.detail, 'no-salute': '✘ No salute for ' + r.who }[r.outcome];
+        toast(msg, r.outcome === 'correct' ? 'good' : 'bad');
+      },
+    });
+    activeCourtesy = this.courtesy;
+    this.events.once('shutdown', () => { activeCourtesy = null; });
+  }
+
+  // Move the computer-controlled flights and people (also used by the page-address fast-forward)
+  stepOthers(dt) {
+    (this.npcs || []).forEach(n => { n.update(dt); n.flight.update(dt); });
+    if (this.people) {
+      this.people.update(dt, [this.flight, ...(this.npcs || []).map(n => n.flight)]);
+      this.courtesy.update(dt, this.people.people);
+    }
+  }
 
   // Someone from another flight at (x, y)? (the player's flight stops instead of walking into them)
   npcAt(x, y) {
@@ -374,6 +400,10 @@ class CampusScene extends Phaser.Scene {
     this.flight.update(dt);
     this.flightView.sync(dt);
     this.stepOthers(dt);
+    if (this.people) {
+      this.peopleView.sync(this.flight.commander, new Set([...this.courtesy.open.keys()]));
+      updateCourtesyHud(this.courtesy);
+    }
     (this.npcs || []).forEach(n => {
       n.view.sync(dt);
       const c = flightCenter(n.flight); n.dot.setPosition(c.x, c.y);

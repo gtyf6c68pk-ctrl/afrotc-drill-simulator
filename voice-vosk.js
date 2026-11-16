@@ -41,6 +41,7 @@ function voskGrammar() {
   phrases.add('flight');
   (DRILL.voicePhrases || []).forEach(p => phrases.add(p));   // e.g. "at ten hut" (Ah-Ten-CHUT)
   if (typeof REPORT_PHRASES !== 'undefined') REPORT_PHRASES.forEach(p => phrases.add(p));   // FDE report in / out
+  if (typeof courtesyPhrases === 'function') courtesyPhrases().forEach(p => phrases.add(p));   // greetings, salute
   phrases.add('[unk]');                                   // anything else
   return [...phrases];
 }

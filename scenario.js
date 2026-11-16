@@ -241,6 +241,12 @@ function routeCommand(text, options) {
   const run = typeof activeRun !== 'undefined' ? activeRun : null;
   const flight = typeof activeFlight !== 'undefined' ? activeFlight : null;
   if (!flight) return null;
+  // Greetings and the commander's salute (courtesy.js, campus)
+  const courtesy = typeof activeCourtesy !== 'undefined' ? activeCourtesy : null;
+  if (courtesy) {
+    const st = courtesy.statement(text);
+    if (st) { flight.feedback((st.good === true ? '✔ ' : st.good ? '⚠ ' : '✘ ') + st.message, st.good); return null; }
+  }
   if (run) {
     const st = run.statement(text);
     if (st) { flight.feedback((st.good ? '✔ ' : '✘ ') + st.message, st.good); return null; }

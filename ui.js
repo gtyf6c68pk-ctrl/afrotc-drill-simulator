@@ -183,6 +183,23 @@ function updateRunHud(force) {
   $('objective').innerHTML = html;
 }
 
+// Campus courtesy panel: who is waiting for a greeting / salute, and the tally so far
+let activeCourtesy = null;          // CourtesyMonitor on the campus (courtesy.js)
+let courtesyHudAt = 0;
+function updateCourtesyHud(mon) {
+  if (performance.now() - courtesyHudAt < 300) return;
+  courtesyHudAt = performance.now();
+  const s = mon.summary(), open = [...mon.open.values()].filter(it => !it.greeted || (mon.needsSalute(it.p) && !it.saluted));
+  let h = '<div class="row"><b>Military courtesy</b><span class="na">' + (COURTESY.confirmed ? '' : 'greeting rules: placeholder') + '</span></div>';
+  h += '<div class="stats">✔ ' + s.correct + ' · missed ' + s.missed + ' · wrong words ' + s.wrong + ' · no salute ' + s.noSalute + '</div>';
+  open.forEach(it => {
+    const officer = mon.needsSalute(it.p);
+    h += '<div class="say">' + esc(personLabel(it.p)) + (officer && !it.saluted ? ' — salute (type SALUTE) and greet' : ' — greet') + '</div>';
+  });
+  $('objective').innerHTML = h;
+  $('objective').classList.remove('hidden');
+}
+
 const esc = t => String(t === null || t === undefined ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
 // The results / debrief screen
@@ -371,7 +388,24 @@ function buildCommandList() {
     { title: 'While marching',   when: ['marching', 'both'], marching: true },
     { title: 'After every halt', when: ['afterHalt'],        marching: false },
   ];
-  const esc = t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  // Campus courtesy panel: who is waiting for a greeting / salute, and the tally so far
+let activeCourtesy = null;          // CourtesyMonitor on the campus (courtesy.js)
+let courtesyHudAt = 0;
+function updateCourtesyHud(mon) {
+  if (performance.now() - courtesyHudAt < 300) return;
+  courtesyHudAt = performance.now();
+  const s = mon.summary(), open = [...mon.open.values()].filter(it => !it.greeted || (mon.needsSalute(it.p) && !it.saluted));
+  let h = '<div class="row"><b>Military courtesy</b><span class="na">' + (COURTESY.confirmed ? '' : 'greeting rules: placeholder') + '</span></div>';
+  h += '<div class="stats">✔ ' + s.correct + ' · missed ' + s.missed + ' · wrong words ' + s.wrong + ' · no salute ' + s.noSalute + '</div>';
+  open.forEach(it => {
+    const officer = mon.needsSalute(it.p);
+    h += '<div class="say">' + esc(personLabel(it.p)) + (officer && !it.saluted ? ' — salute (type SALUTE) and greet' : ' — greet') + '</div>';
+  });
+  $('objective').innerHTML = h;
+  $('objective').classList.remove('hidden');
+}
+
+const esc = t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
   let html = '';
   groups.forEach(g => {
     html += '<p><b>' + g.title + '</b></p><ul>';

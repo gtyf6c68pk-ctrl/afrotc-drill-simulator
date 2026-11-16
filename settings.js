@@ -37,6 +37,8 @@ const SETTING_OPTIONS = [
     show: v => v === 'on' ? 'On' : 'Off' },
   { key: 'npcFlights', label: 'Other flights on campus (computer-controlled)', values: [0, 1, 2, 3, 4],
     show: v => v === 0 ? 'None' : String(v) },
+  { key: 'campusPeople', label: 'People on campus (greet and salute)', values: ['on', 'off'],
+    show: v => v === 'on' ? 'Shown' : 'None' },
 ];
 
 const DEFAULT_SETTINGS = {
@@ -46,6 +48,7 @@ const DEFAULT_SETTINGS = {
   padSize: 'medium',
   campusStart: 'lowder',
   npcFlights: 3,
+  campusPeople: 'on',
   disorder: 'normal',
   cdrSide: 'left',
   metronome: 'on',

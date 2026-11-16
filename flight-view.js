@@ -48,6 +48,7 @@ class FlightView {
     const info = this.flight.footInfo();        // null at the halt
     const now = this.scene.time.now / 1000;
     const k = 1 - Math.exp(-dt * 16);           // turn smoothing (a quarter turn takes ~0.15 s)
+    if (this.flight.cdrSaluting > 0) this.flight.cdrSaluting -= Math.min(dt, 0.1);
     if (this.label) {                            // name label just north of the flight
       const ps = this.flight.everyone();
       this.label.setPosition(ps.reduce((a, p) => a + p.x, 0) / ps.length, Math.min(...ps.map(p => p.y)) - 26);
@@ -86,6 +87,7 @@ class FlightView {
       s.leftBoot.x = s.base.lb - spread; s.rightBoot.x = s.base.rb + spread;
       s.leftArm.x = s.base.la; s.rightArm.x = s.base.ra;
       if (s.flag) s.flag.setRotation(0);
+      const cdrSalute = p.kind === 'commander' && this.flight.cdrSaluting > 0;   // commander's own salute (courtesy)
       if (posture === 'paradeRest') {
         s.leftArm.y = 3; s.rightArm.y = 3;
         s.leftArm.x = s.base.la + 1.5 * PX; s.rightArm.x = s.base.ra - 1.5 * PX;
@@ -93,6 +95,8 @@ class FlightView {
         s.leftArm.y = 0;
         if (s.flag) { s.rightArm.y = 0; s.flag.setRotation(0.7); }   // guidon: the flag is dipped forward
         else { s.rightArm.y = -6; s.rightArm.x = s.base.ra - 2.5 * PX; }
+      } else if (cdrSalute) {
+        s.leftArm.y = 0; s.rightArm.y = -6; s.rightArm.x = s.base.ra - 2.5 * PX;
       } else if (armsAtWaist) {                    // double time: forearms horizontal at the waist
         s.leftArm.y = -3; s.rightArm.y = -3;
       } else if (info && info.sideStep) {          // side step: arms stay at the sides (3.14.1)
