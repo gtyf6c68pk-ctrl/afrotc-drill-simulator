@@ -63,8 +63,12 @@ function signedTimingAt(p, foot) {
   return p - (Math.round((p - offset) / 2) * 2 + offset);
 }
 
-function prepTimingProblem(prepStep, execStep, foot, grace, stepSec) {
+//   prepStartStep (optional): when the FIRST word of a multi-word preparatory command was said. The
+//   preparatory command is on time if EITHER its first word (3.9.2) or its last word (2.4.2) is.
+function prepTimingProblem(prepStep, execStep, foot, grace, stepSec, prepStartStep) {
   grace = grace || TIMING_GRACE;
+  if (prepStartStep !== undefined && prepStartStep !== null && prepStartStep < prepStep &&
+      !prepTimingProblem(prepStartStep, execStep, foot, grace, stepSec)) return null;
   const P = DRILL.preparatory;
   const gap = execStep - prepStep;
   const round2 = v => Math.round(v * 100) / 100;
@@ -84,7 +88,7 @@ function prepTimingProblem(prepStep, execStep, foot, grace, stepSec) {
              (signedTimingAt(prepStep, foot) > 0 ? 'late' : 'early') + ')' : '';
   return { error: round2(error), gap: round2(gap), by,
            text: 'preparatory command ' + (error > 0.5 ? 'on the WRONG foot' : 'a little off the heel strike' + by) +
-                 '; give it as the ' + foot.toUpperCase() + ' heel strikes, two steps before the command of execution (DAFPAM 3.9.2)' };
+                 '; start it (or its last word) as the ' + foot.toUpperCase() + ' heel strikes, and give the command of execution when that heel strikes again (DAFPAM 2.4.2, 3.9.2)' };
 }
 
 function timingErrorAt(p, foot) {
@@ -555,11 +559,13 @@ class FlightLogic {
   // that, and move the "one more step" onto the correct step if it hasn't happened yet.
   //   ageAtGive: seconds between the word being said and the command being carried out
   //   prepAgeAtGive (optional): the same for the last word of the preparatory command
-  judgeTiming(handle, ageAtGive, prepAgeAtGive) {
+  judgeTiming(handle, ageAtGive, prepAgeAtGive, prepStartAgeAtGive) {
     if (!handle) return;
     const bias = this.timingBias(true);                          // this computer's measured voice delay
     ageAtGive += bias;
     if (prepAgeAtGive !== undefined && prepAgeAtGive !== null) prepAgeAtGive += bias;
+    const prepStartStep = prepStartAgeAtGive !== undefined && prepStartAgeAtGive !== null
+      ? handle.stepAtGive - (prepStartAgeAtGive + bias) / handle.stepSec : null;
     const exactStep = handle.stepAtGive - ageAtGive / handle.stepSec;
     if (handle.pending && this.pending === handle.pending) {
       this.pending.at = Math.max(Math.round(exactStep) + handle.pendingOffset, this.realSteps());
@@ -568,7 +574,8 @@ class FlightLogic {
     const error = timingErrorAt(exactStep, handle.foot);
     const problem = this.timingProblem(error, handle.foot, signedTimingAt(exactStep, handle.foot) * handle.stepSec);
     const prepStep = prepAgeAtGive !== undefined && prepAgeAtGive !== null ? handle.stepAtGive - prepAgeAtGive / handle.stepSec : null;
-    const prep = prepStep !== null && this.opts.gradePrep !== false ? prepTimingProblem(prepStep, exactStep, handle.foot, this.grace(), handle.stepSec) : null;
+    const prep = prepStep !== null && this.opts.gradePrep !== false
+      ? prepTimingProblem(prepStep, exactStep, handle.foot, this.grace(), handle.stepSec, prepStartStep) : null;
     this.log('timing-graded', { commandId: handle.id, name: handle.name, foot: handle.foot,
                                 timingError: Math.round(error * 100) / 100, problem: problem ? problem.text : null,
                                 prepGiven: prepStep !== null, prepProblem: prep ? prep.text : null,
@@ -1187,6 +1194,8 @@ class FlightLogic {
     const saidStep = age => this.marching ? this.realSteps() - (age || 0) / stepSecNow : null;
     // When the preparatory command was said (cadence position), if known
     let prepStep = options.prepAgeSeconds !== undefined && options.prepAgeSeconds !== null ? saidStep(options.prepAgeSeconds) : null;
+    const prepStartStep = options.prepStartAgeSeconds !== undefined && options.prepStartAgeSeconds !== null
+      ? saidStep(options.prepStartAgeSeconds + bias) : null;
 
     // 0. Two-part commands: the preparatory command on its own ("Right Flank"), then the command
     //    of execution ("HARCH") within a few seconds. Both moments are graded (DAFPAM 3.9.2).
@@ -1289,7 +1298,7 @@ class FlightLogic {
     const stepSec = this.doubleTime ? this.doubleStepSeconds : this.stepSeconds;
     const execStep = saidStep(options.ageSeconds);
     const prepIssue = foot && prepStep !== null && !options.deferTiming && this.opts.gradePrep !== false
-      ? prepTimingProblem(prepStep, execStep, foot, this.grace(), stepSec) : null;
+      ? prepTimingProblem(prepStep, execStep, foot, this.grace(), stepSec, prepStartStep) : null;
     const signedSec = foot && execStep !== null ? signedTimingAt(execStep, foot) * stepSec : null;
     this.commandAt = this.realSteps() - (options.ageSeconds || 0) / stepSec;   // when it was really given
 

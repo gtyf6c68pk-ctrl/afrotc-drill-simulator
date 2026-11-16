@@ -152,6 +152,12 @@ const voskEngine = {
       const n = execWordCount(all.slice(from, to).map(w => w.word));
       return to - 1 - n >= from ? toMs(all[to - 1 - n]) : null;
     };
+    // ...and its FIRST word, when it has more than one ("Column" in "Column Right"): DAFPAM 3.9.2 can be
+    // read as starting the preparatory command on the heel, 2.4.2 as its last word on the heel; both count
+    const prepStartMs = (from, to) => {
+      const n = execWordCount(all.slice(from, to).map(w => w.word));
+      return to - 1 - n > from ? toMs(all[from]) : null;
+    };
     let pos = 0, note = '';
     // Start fresh for the next utterance FIRST, so nothing below can leave stale notes behind
     const executed = this.executed;
@@ -164,8 +170,9 @@ const voskEngine = {
       const last = all[pos + e.count - 1];
       const saidAt = toMs(last);
       if (saidAt !== null && activeFlight) {
-        const prepAt = prepMs(pos, pos + e.count);
-        activeFlight.judgeTiming(e.handle, (e.givenAt - saidAt) / 1000, prepAt !== null ? (e.givenAt - prepAt) / 1000 : null);
+        const prepAt = prepMs(pos, pos + e.count), prepStart = prepStartMs(pos, pos + e.count);
+        activeFlight.judgeTiming(e.handle, (e.givenAt - saidAt) / 1000, prepAt !== null ? (e.givenAt - prepAt) / 1000 : null,
+                                 prepStart !== null ? (e.givenAt - prepStart) / 1000 : null);
         // How long recognition took (NOT the timing grade: commands are graded from when the word was said)
         note = ' (recognized ' + ((e.givenAt - saidAt) / 1000).toFixed(2) + ' s after you said it; timed from when you said it)';
       }
@@ -180,9 +187,10 @@ const voskEngine = {
       const key = cleanUpCommand(text, true);
       const saidAt = toMs(rest[rest.length - 1]);
       if (COMMANDS_BY_KEY[key]) {
-        const prepAt = prepMs(pos, all.length);
+        const prepAt = prepMs(pos, all.length), prepStart = prepStartMs(pos, all.length);
         this.give(text, { voice: true, ageSeconds: saidAt !== null ? (performance.now() - saidAt) / 1000 : settings.voiceDelay,
-                          prepAgeSeconds: prepAt !== null ? (performance.now() - prepAt) / 1000 : null });
+                          prepAgeSeconds: prepAt !== null ? (performance.now() - prepAt) / 1000 : null,
+                          prepStartAgeSeconds: prepStart !== null ? (performance.now() - prepStart) / 1000 : null });
       } else if (this.isCommandStart(rest.map(w => w.word))) {
         this.carry = { words: rest.map(w => w.word), times: rest.map(toMs), until: performance.now() + VOSK_HOLD_SECONDS * 1000 };
         voice.status('🎤 Heard: “' + text + '” … waiting for the command of execution', 'good');
